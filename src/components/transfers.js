@@ -1,0 +1,660 @@
+// ==========================================
+// TRASLADOS Y LOGÍSTICA — Mercado de Cafeteras
+// ==========================================
+
+async function renderTransfers() {
+  const v = document.getElementById('view-transfers');
+
+  if (!v.innerHTML) v.innerHTML = '<div class="loading">Cargando logística...</div>';
+
+  try {
+    if (SUPABASE_KEY !== 'TU_ANON_KEY_AQUI') {
+      const remoteTransfers = await db.transfers.getAll();
+      if (remoteTransfers) DATA.transfers = remoteTransfers;
+    }
+  } catch (err) {
+    console.warn('Usando mock data para traslados:', err);
+  }
+
+  const solicitados = DATA.transfers.filter(t => t.estado === 'solicitado').length;
+  const enCamino = DATA.transfers.filter(t => t.estado === 'enviado').length;
+
+  v.innerHTML = `
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:22px;flex-wrap:wrap;gap:12px;">
+      <h2 class="font-display" style="font-size:18px;">Logística y Transferencias</h2>
+      <div style="display:flex; gap:10px;">
+        ${currentUser.role !== 'admin' ? '<button class="btn btn-ghost" style="border:1px solid var(--text-muted);" onclick="openRequestModal()">+ Solicitar Producto al Depósito</button>' : ''}
+        ${currentUser.role === 'admin' ? '<button class="btn btn-primary" onclick="openTransferModal()">+ Nuevo Envío Directo</button>' : ''}
+      </div>
+    </div>
+
+    <!-- Mini KPIs -->
+    <div class="grid-3" style="margin-bottom:22px;">
+      <div class="kpi-card">
+        <div class="kpi-header"><span class="kpi-icon">🚚</span></div>
+        <div class="kpi-value">${DATA.transfers.length}</div>
+        <div class="kpi-label">Movimientos totales</div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-header"><span class="kpi-icon">📝</span></div>
+        <div class="kpi-value" style="color:var(--text-secondary);">${solicitados}</div>
+        <div class="kpi-label">Solicitudes Pendientes</div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-header"><span class="kpi-icon">📍</span></div>
+        <div class="kpi-value" style="color:var(--yellow);">${enCamino}</div>
+        <div class="kpi-label">En camino al local</div>
+      </div>
+    </div>
+
+    <div class="card" style="padding:0;overflow:hidden;">
+      <table class="data-table">
+        <thead>
+          <tr>
+            <th>ID Remito</th><th>Fecha</th><th>Producto</th><th>Cant.</th><th>Origen → Destino</th><th>Estado</th><th>Acciones</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${DATA.transfers.length === 0 
+            ? '<tr><td colspan="7" style="text-align:center;padding:32px;color:var(--text-muted);">No hay logística registrada</td></tr>'
+            : DATA.transfers.map(t => `
+            <tr style="background: ${t.estado==='con_error' ? 'rgba(235,87,87,0.05)' : 'transparent'};">
+              <td style="font-weight:700; color:var(--gold-mid);">${String(t.id).replace(/-[0-9]+$/, '')}</td>
+              <td style="color:var(--text-muted); font-size:11px;">${t.fecha}</td>
+              <td style="font-weight:600; font-size:12px; max-width:200px;">${t.producto}</td>
+              <td style="text-align:center; font-weight:700;">${t.qty}</td>
+              <td style="font-size:11px;">
+                <span class="${t.origen==='deposito'?'':(t.origen==='lanus'?'branch-lanus':'branch-belgrano')}" style="padding:2px 6px;border-radius:4px;border:1px solid var(--border-subtle);">${t.origen.toUpperCase()}</span>
+                <span style="color:var(--text-muted);">→</span>
+                <span class="${t.destino==='deposito'?'':(t.destino==='lanus'?'branch-lanus':'branch-belgrano')}" style="padding:2px 6px;border-radius:4px;border:1px solid var(--border-subtle);">${t.destino.toUpperCase()}</span>
+              </td>
+              <td>
+                <span class="stock-pill" style="
+                  ${t.estado==='recibido'?'color:var(--green); border-color:var(--green);':''}
+                  ${t.estado==='con_error'?'color:var(--red); border-color:var(--red);':''}
+                  ${t.estado==='enviado'?'color:var(--yellow); border-color:var(--yellow);':''}
+                  ${t.estado==='solicitado'?'color:var(--text-secondary); border-color:var(--text-secondary);':''}
+                ">
+                  ${t.estado==='recibido'?'✓ Recibido':''}
+                  ${t.estado==='con_error'?'❌ Desvío/Error':''}
+                  ${t.estado==='enviado'?'🚚 En camino':''}
+                  ${t.estado==='solicitado'?'📝 Solicitado':''}
+                </span>
+              </td>
+              <td style="display:flex; gap:5px;">
+                ${getTransferActions(t)}
+                <button class="btn btn-ghost" style="padding:4px 8px; font-size:11px;" onclick="printRemito('${t.id}')">🖨️ PDF</button>
+              </td>
+            </tr>
+          `).join('')}
+        </tbody>
+      </table>
+    </div>
+
+    <!-- Modal Enviar/Crear Traslado Oficial -->
+    <div class="modal-overlay" id="transfer-modal">
+      <div class="modal-box" style="width:500px; max-width:90%">
+        <div class="modal-title">📦 Preparar Envío Especial Múltiple</div>
+        
+        <div class="grid-2">
+          <div class="form-group">
+            <label class="form-label">Desde</label>
+            <select class="form-input" id="tr-origen" onchange="onTransferOrigenChange()">
+              <option value="deposito">Depósito Central</option>
+              <option value="lanus">Lanús</option>
+              <option value="belgrano">Belgrano</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Hacia</label>
+            <select class="form-input" id="tr-destino">
+              <option value="lanus">Sucursal Lanús</option>
+              <option value="belgrano">Sucursal Belgrano</option>
+              <option value="deposito">Depósito Central</option>
+            </select>
+          </div>
+        </div>
+
+        <div style="background:var(--bg-card); padding:10px; border-radius:8px; border:1px solid var(--border-subtle); margin-bottom:15px; position:relative; z-index:9;">
+          <div style="display:flex; gap:10px; align-items:end;">
+            <div class="form-group" style="margin-bottom:0; flex:1;">
+              <label class="form-label">Producto a Mover</label>
+              <select class="form-input" id="tr-prod">
+                <!-- Llenado dinámicamente -->
+              </select>
+            </div>
+            <div class="form-group" style="margin-bottom:0; width:70px;">
+              <label class="form-label">Cant.</label>
+              <input type="number" id="tr-qty" class="form-input" value="1" min="1" />
+            </div>
+            <button class="btn btn-secondary" style="white-space:nowrap; padding: 10px 15px; height: 38px;" onclick="addTransferCartItem()">+ Agregar</button>
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">Productos en este envío:</label>
+          <div id="transfer-cart-list" style="border:1px solid var(--border-subtle); border-radius:8px; min-height:80px; padding:10px; background:var(--bg-color); font-size:13px; max-height:150px; overflow-y:auto;">
+            <!-- Renderizado por JS -->
+          </div>
+        </div>
+
+        <div class="form-actions">
+          <button class="btn btn-ghost" onclick="closeTransferModal()">Cancelar</button>
+          <button class="btn btn-primary" onclick="createTransfer()">✅ Enviar Todo</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Modal Solicitar Reposición (Para Vendedores) -->
+    <div class="modal-overlay" id="request-modal">
+      <div class="modal-box">
+        <div class="modal-title">🙋‍♂️ Solicitar Reposición de Mercadería</div>
+        <p style="font-size:12px; color:var(--text-muted); margin-bottom:15px;">Esto generará un aviso al depósito para que te lo envíen a tu local (${currentUser.location.toUpperCase()}). El stock no se altera hasta que ellos confirmen el envío.</p>
+        <div class="form-group">
+          <label class="form-label">¿Qué producto necesitas?</label>
+          <select class="form-input" id="req-prod" onchange="onRequestProdChange()">
+            ${DATA.stock.map(s => `<option value="${s.id}">${s.nombre}</option>`).join('')}
+          </select>
+          <div id="req-modal-stock-info" style="font-size:11px; color:var(--text-muted); margin-top:5px;"></div>
+        </div>
+        <div class="form-group">
+          <label class="form-label">¿Cuántas unidades faltan?</label>
+          <input type="number" id="req-qty" class="form-input" value="1" min="1" />
+        </div>
+        <div class="form-actions">
+          <button class="btn btn-ghost" onclick="closeRequestModal()">Cancelar</button>
+          <button class="btn btn-primary" onclick="createRequest()">📝 Enviar Solicitud</button>
+        </div>
+      </div>
+    </div>
+    
+  `;
+}
+
+function getTransferActions(t) {
+  if (t.estado === 'solicitado' && currentUser.role === 'admin') {
+    return `<button class="btn btn-primary" style="font-size:10px;padding:4px 8px;" onclick="approveRequest('${t.id}')">Aprobar y Enviar →</button>`;
+  }
+  if (t.estado === 'enviado' && (currentUser.location === t.destino || currentUser.role === 'admin')) {
+    return `
+      <button class="btn btn-primary" style="font-size:10px;padding:4px 8px; background:var(--green); color:white;" onclick="receiveTransfer('${t.id}')">✅ Confirmar Recepción</button>
+      <button class="btn btn-ghost" style="font-size:10px;padding:4px 8px; border:1px solid var(--red); color:var(--red);" onclick="reportTransferError('${t.id}')">⚠️ Reportar Desvío</button>
+    `;
+  }
+  return '';
+}
+
+window.transferCart = [];
+
+function renderTransferCartOptions() {
+  const origen = document.getElementById('tr-origen').value;
+  const prodSelect = document.getElementById('tr-prod');
+  if(!prodSelect) return;
+  prodSelect.innerHTML = DATA.stock.map(s => {
+    const stck = s[origen] || 0;
+    return `<option value="${s.id}">${s.nombre} (Stock: ${stck})</option>`;
+  }).join('');
+}
+
+function onTransferOrigenChange() {
+  window.transferCart = [];
+  renderTransferCartOptions();
+  renderTransferCartUI();
+}
+
+function addTransferCartItem() {
+  const pId = parseInt(document.getElementById('tr-prod').value);
+  const qty = parseInt(document.getElementById('tr-qty').value);
+  const origen = document.getElementById('tr-origen').value;
+  
+  if (isNaN(qty) || qty <= 0) return;
+  const prod = DATA.stock.find(s => s.id === pId);
+  if (!prod) return;
+
+  const currentCartQty = window.transferCart.filter(item => item.id === pId).reduce((acc, item) => acc + item.qty, 0);
+
+  if ((currentCartQty + qty) > (prod[origen] || 0)) {
+    showToast(`⚠️ No hay stock suficiente en ${origen.toUpperCase()} (Total Disp: ${prod[origen] || 0})`, 'error');
+    return;
+  }
+
+  const existing = window.transferCart.find(item => item.id === pId);
+  if (existing) {
+    existing.qty += qty;
+  } else {
+    window.transferCart.push({ id: pId, nombre: prod.nombre, qty });
+  }
+
+  document.getElementById('tr-qty').value = 1;
+  renderTransferCartUI();
+}
+
+function removeTransferCartItem(pId) {
+  window.transferCart = window.transferCart.filter(item => item.id !== pId);
+  renderTransferCartUI();
+}
+
+function renderTransferCartUI() {
+  const list = document.getElementById('transfer-cart-list');
+  if(!list) return;
+  
+  if (window.transferCart.length === 0) {
+    list.innerHTML = '<div style="color:var(--text-muted); text-align:center; margin-top:20px;">No agregaste productos al envío.</div>';
+    return;
+  }
+
+  list.innerHTML = window.transferCart.map(item => `
+    <div style="display:flex; justify-content:space-between; margin-bottom:8px; padding-bottom:8px; border-bottom:1px solid var(--border-subtle);">
+      <span><strong style="color:var(--gold-mid);">${item.qty}x</strong> ${item.nombre}</span>
+      <button class="btn btn-ghost" onclick="removeTransferCartItem(${item.id})" title="Quitar" style="padding:0 5px; color:var(--red); font-size:14px;">X</button>
+    </div>
+  `).join('');
+}
+
+/* Modal Triggers */
+function openTransferModal(prodId = null) {
+  window.transferCart = [];
+  document.getElementById('transfer-modal').classList.add('active');
+  renderTransferCartOptions();
+  renderTransferCartUI();
+  if (prodId) document.getElementById('tr-prod').value = prodId;
+}
+function closeTransferModal() {
+  document.getElementById('transfer-modal').classList.remove('active');
+}
+function openRequestModal(prodId = null) {
+  document.getElementById('request-modal').classList.add('active');
+  if (prodId) {
+    document.getElementById('req-prod').value = prodId;
+  }
+  if (typeof onRequestProdChange === 'function') {
+    onRequestProdChange();
+  }
+}
+function closeRequestModal() {
+  document.getElementById('request-modal').classList.remove('active');
+}
+
+function onRequestProdChange() {
+  const pId = parseInt(document.getElementById('req-prod').value);
+  const prod = DATA.stock.find(s => s.id === pId);
+  const el = document.getElementById('req-modal-stock-info');
+  if (prod && el) {
+    el.innerHTML = `Stock disponible en <b>Depósito</b>: <span style="color:${prod.deposito > 0 ? 'var(--green)' : 'var(--red)'}; font-weight:bold;">${prod.deposito}</span> u.`;
+  }
+}
+
+/* Logic */
+function generateTransferID() {
+  return 'REM-' + Math.floor(1000 + Math.random() * 9000);
+}
+
+async function createRequest() {
+  const pId = parseInt(document.getElementById('req-prod').value);
+  const qty = parseInt(document.getElementById('req-qty').value);
+  const destino = currentUser.location;
+
+  if (qty <= 0) return;
+  const prod = DATA.stock.find(s => s.id === pId);
+  const today = new Date();
+  
+  const newReq = {
+    id: generateTransferID(),
+    origen: 'deposito', destino, 
+    producto: prod.nombre, stock_id: pId, 
+    qty, 
+    fecha: `${today.getDate().toString().padStart(2,'0')}/${(today.getMonth()+1).toString().padStart(2,'0')} ${today.getHours()}:${today.getMinutes()}hs`, 
+    estado: 'solicitado'
+  };
+
+  try {
+    if (SUPABASE_KEY !== 'TU_ANON_KEY_AQUI') {
+      await db.transfers.insert(newReq);
+    }
+  } catch (e) {
+    showToast('⚠️ Error conexión', 'warning');
+  }
+
+  DATA.transfers.unshift(newReq);
+  closeRequestModal();
+  renderTransfers();
+  showToast('Solicitud enviada al Depósito', 'success');
+}
+
+async function approveRequest(trId) {
+  const tr = DATA.transfers.find(t => t.id === trId);
+  const prod = DATA.stock.find(s => s.id === parseInt(tr.stock_id));
+  
+  if (prod[tr.origen] < tr.qty) {
+    showToast(`⚠️ Stock insuficiente en ${tr.origen.toUpperCase()} (Hay ${prod[tr.origen]}). No se puede enviar.`, 'error');
+    return;
+  }
+
+  // 1. Descontamos de origen
+  prod[tr.origen] -= tr.qty;
+  tr.estado = 'enviado';
+
+  try {
+    if (SUPABASE_KEY !== 'TU_ANON_KEY_AQUI') {
+      await Promise.all([
+        db.transfers.update(trId, { estado: 'enviado' }),
+        db.stock.updateBranch(prod.id, tr.origen, prod[tr.origen])
+      ]);
+    }
+  } catch (err) { }
+
+  renderTransfers();
+  showToast('✅ Mercadería enviada y stock del origen descontado', 'success');
+  printRemito(trId); // Automáticamente sugiere imprimir el remito para dárselo al flete
+}
+
+async function createTransfer() {
+  const origen = document.getElementById('tr-origen').value;
+  const destino = document.getElementById('tr-destino').value;
+
+  if (origen === destino) {
+    showToast('⚠️ Origen y destino deben ser distintos', 'error');
+    return;
+  }
+
+  if (!window.transferCart || window.transferCart.length === 0) {
+    showToast('⚠️ Agregá al menos un producto al envío', 'error');
+    return;
+  }
+
+  // Validate ALL stocks before proceeding
+  for (const item of window.transferCart) {
+    const prod = DATA.stock.find(s => s.id === item.id);
+    if (!prod || (prod[origen] || 0) < item.qty) {
+      showToast(`⚠️ No hay stock suficiente de ${item.nombre} en ${origen.toUpperCase()}`, 'error');
+      return;
+    }
+  }
+
+  const today = new Date();
+  const fecha = `${today.getDate().toString().padStart(2,'0')}/${(today.getMonth()+1).toString().padStart(2,'0')} ${today.getHours()}:${today.getMinutes()}hs`;
+  
+  const baseTrId = generateTransferID();
+  const createdTransfersIds = [];
+  const pUpdates = [];
+
+  for (let i = 0; i < window.transferCart.length; i++) {
+    const item = window.transferCart[i];
+    const trId = window.transferCart.length > 1 ? `${baseTrId}-${i+1}` : baseTrId;
+    createdTransfersIds.push(trId);
+    
+    const prod = DATA.stock.find(s => s.id === item.id);
+    prod[origen] -= item.qty; // Descuento optimista
+    
+    const newTr = {
+      id: trId,
+      origen, destino, producto: prod.nombre, stock_id: item.id, qty: item.qty, 
+      fecha: fecha,
+      estado: 'enviado'
+    };
+    DATA.transfers.unshift(newTr);
+
+    if (SUPABASE_KEY !== 'TU_ANON_KEY_AQUI') {
+      pUpdates.push(db.transfers.insert(newTr));
+      pUpdates.push(db.stock.updateBranch(item.id, origen, prod[origen]));
+    }
+  }
+
+  try {
+    if (SUPABASE_KEY !== 'TU_ANON_KEY_AQUI') {
+      await Promise.all(pUpdates);
+    }
+  } catch (err) {
+      console.warn('Error en Supabase, aplicando ROLLBACK', err);
+      showToast('⚠️ Falla de conectividad. Revirtiendo transacción.', 'error');
+      
+      // Rollback: Revertir stock local descontado
+      for (let i = 0; i < window.transferCart.length; i++) {
+        const item = window.transferCart[i];
+        const prod = DATA.stock.find(s => s.id === item.id);
+        if (prod) prod[origen] += item.qty; 
+      }
+      
+      // Remover de DATA.transfers los registros creados temporalmente
+      DATA.transfers = DATA.transfers.filter(t => !createdTransfersIds.includes(t.id));
+      renderTransfers();
+      return; 
+  }
+
+  closeTransferModal();
+  renderTransfers();
+  showToast('🚚 Envío múltiple registrado con éxito', 'success');
+  printMultiRemito(createdTransfersIds, baseTrId, origen, destino, fecha);
+}
+
+function printMultiRemito(ids, baseTrId, origen, destino, fecha) {
+  const trs = ids.map(id => DATA.transfers.find(t => t.id === id)).filter(Boolean);
+  if (trs.length === 0) return;
+
+  const printWindow = window.open('', '', 'width=800,height=600');
+  printWindow.document.write(`
+    <html>
+      <head>
+        <title>Remito Interno: ${baseTrId}</title>
+        <style>
+          body { font-family: 'Arial', sans-serif; padding: 20px; color: #333; }
+          .header { text-align: center; border-bottom: 2px solid #000; padding-bottom: 10px; margin-bottom: 20px; }
+          .header h1 { margin: 0; font-size:24px; text-transform:uppercase; }
+          .meta { display:flex; justify-content:space-between; margin-bottom:30px; font-size:14px; }
+          .big-data { font-size: 18px; margin-bottom: 15px; }
+          table { width: 100%; border-collapse: collapse; margin-top: 30px; }
+          th, td { border: 1px solid #ccc; padding: 12px; text-align: left; }
+          th { background: #f0f0f0; }
+          .signatures { display:flex; justify-content: space-between; margin-top: 80px; }
+          .sign-box { border-top: 1px solid #000; width: 40%; text-align:center; padding-top:10px; }
+        </style>
+      </head>
+      <body>
+        <div class="header">
+          <h1>REMITO INTERNO DE TRASLADO MÚLTIPLE</h1>
+          <h4>MERCADO DE CAFETERAS</h4>
+        </div>
+        <div class="meta">
+          <div>
+            <strong>Nro Remito:</strong> <span style="font-size:16px;">${baseTrId}</span><br>
+            <strong>Fecha Emisión:</strong> ${fecha}<br>
+            <strong>Estado:</strong> ENVIADO
+          </div>
+          <div style="font-size:28px;">📦</div>
+        </div>
+
+        <div class="big-data">
+          <strong>Origen de salida:</strong> ${origen.toUpperCase()} <br><br>
+          <strong>Destino de entrega:</strong> ${destino.toUpperCase()}
+        </div>
+
+        <table>
+          <thead>
+            <tr>
+              <th>CANT.</th>
+              <th>DESCRIPCIÓN DEL PRODUCTO / MERCADERÍA</th>
+              <th>ID REMITO INDIVIDUAL</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${trs.map(tr => `
+              <tr>
+                <td style="font-size:18px; text-align:center; font-weight:bold; width: 80px;">${tr.qty}</td>
+                <td style="font-size:14px;">${tr.producto}</td>
+                <td style="font-size:12px; color:#555;">${tr.id}</td>
+              </tr>
+            `).join('')}
+          </tbody>
+        </table>
+
+        <div style="margin-top:30px; border:1px dashed #ccc; padding:15px; font-size:12px;">
+          <strong>Control de Arribo:</strong> Al recibir la mercadería en ${destino.toUpperCase()}, el vendedor de turno debe controlar visualmente y luego ingresar al Sistema > Logística y presionar "Confirmar Recepción" POR CADA ÍTEM para imputar el stock. En caso de discrepancias, presionar "Reportar Desvío".
+        </div>
+
+        <div class="signatures">
+          <div class="sign-box">Firma Responsable ORIGEN<br>(Entrega)</div>
+          <div class="sign-box">Firma Transportista / Flete <br>(Verifica Cantidad Cargada)</div>
+        </div>
+        <div style="text-align:center; font-size:10px; margin-top:50px; color:#666;">Documento válido para uso interno. No válido como factura.</div>
+      </body>
+    </html>
+  `);
+  printWindow.document.close();
+  printWindow.focus();
+  setTimeout(() => {
+    printWindow.print();
+    printWindow.close();
+  }, 250);
+}
+
+async function receiveTransfer(trId) {
+  if (!confirm('¿Confirmás que recibiste EXACTAMENTE la cantidad que dice el remito?')) return;
+
+  const tr = DATA.transfers.find(t => t.id === trId);
+  if (!tr) return;
+
+  // Recepción de máquina en reparación (desde Belgrano a taller Lanús)
+  if (!tr.stock_id || String(tr.stock_id) === '0' || String(tr.id).startsWith('REM-REP-')) {
+    const isRep = String(tr.id).startsWith('REM-REP-');
+    if (isRep) {
+       const repId = tr.id.replace('REM-REP-', '');
+       const rep = DATA.repairs.find(r => r.id === repId);
+       if (rep) {
+         rep.sucursal = tr.destino;
+         try {
+           if (SUPABASE_KEY !== 'TU_ANON_KEY_AQUI') await db.repairs.update(repId, { sucursal: tr.destino });
+         } catch(e) {}
+       }
+    }
+    
+    tr.estado = 'recibido';
+    try {
+      if (SUPABASE_KEY !== 'TU_ANON_KEY_AQUI') await db.transfers.update(trId, { estado: 'recibido' });
+    } catch(e) {}
+    
+    renderTransfers();
+    // Re-render repairs view if open
+    if(typeof renderRepairs === 'function' && document.getElementById('view-repairs') && document.getElementById('view-repairs').innerHTML !== '') {
+       renderKanban();
+    }
+    showToast(`✅ Recepción OK. Reparación ingresada al taller.`, 'success');
+    return;
+  }
+
+  // Recepción normal de stock de producto
+  const prod = DATA.stock.find(s => s.id === parseInt(tr.stock_id));
+  if (prod) {
+    prod[tr.destino] += tr.qty;
+    tr.estado = 'recibido';
+
+    try {
+      if (SUPABASE_KEY !== 'TU_ANON_KEY_AQUI') {
+        await Promise.all([
+          db.transfers.update(trId, { estado: 'recibido' }),
+          db.stock.updateBranch(prod.id, tr.destino, prod[tr.destino])
+        ]);
+      }
+    } catch (err) { }
+
+    renderTransfers();
+    showToast(`✅ Recepción perfecta. Stock sumado a ${tr.destino.toUpperCase()}`, 'success');
+  }
+}
+
+async function reportTransferError(trId) {
+  const reason = prompt('Por favor, detallá cuál fue el error (Ejs: "Faltaron 2 unidades", "Caja Rota", "Producto Equivocado"):');
+  if (!reason) return; // cancelled
+
+  const tr = DATA.transfers.find(t => t.id === trId);
+  if (tr) {
+    tr.estado = 'con_error';
+    // El stock NO ingresó. La admin deberá ajustar el DB manualmente luego.
+    
+    try {
+      if (SUPABASE_KEY !== 'TU_ANON_KEY_AQUI') {
+        await db.transfers.update(trId, { estado: 'con_error' });
+      }
+    } catch (err) { }
+
+    renderTransfers();
+    showToast('🚨 Desvío reportado a la administración.', 'warning');
+  }
+}
+
+function printRemito(trId) {
+  const tr = DATA.transfers.find(t => t.id === trId);
+  if (!tr) return;
+
+  const printWindow = window.open('', '', 'width=800,height=600');
+  printWindow.document.write(`
+    <html>
+      <head>
+        <title>Remito Interno: ${tr.id}</title>
+        <style>
+          body { font-family: 'Arial', sans-serif; padding: 20px; color: #333; }
+          .header { text-align: center; border-bottom: 2px solid #000; padding-bottom: 10px; margin-bottom: 20px; }
+          .header h1 { margin: 0; font-size:24px; text-transform:uppercase; }
+          .meta { display:flex; justify-content:space-between; margin-bottom:30px; font-size:14px; }
+          .big-data { font-size: 18px; margin-bottom: 15px; }
+          table { width: 100%; border-collapse: collapse; margin-top: 30px; }
+          th, td { border: 1px solid #ccc; padding: 12px; text-align: left; }
+          th { background: #f0f0f0; }
+          .signatures { display:flex; justify-content: space-between; margin-top: 80px; }
+          .sign-box { border-top: 1px solid #000; width: 40%; text-align:center; padding-top:10px; }
+        </style>
+      </head>
+      <body>
+        <div class="header">
+          <h1>REMITO INTERNO DE TRASLADO</h1>
+          <h4>MERCADO DE CAFETERAS</h4>
+        </div>
+        <div class="meta">
+          <div>
+            <strong>Nro Remito:</strong> ${tr.id}<br>
+            <strong>Fecha Emisión:</strong> ${tr.fecha}<br>
+            <strong>Estado:</strong> ${tr.estado.toUpperCase()}
+          </div>
+          <div>
+             <span style="font-size:28px;">📦</span>
+          </div>
+        </div>
+
+        <div class="big-data">
+          <strong>Origen de salida:</strong> ${tr.origen.toUpperCase()} <br><br>
+          <strong>Destino de entrega:</strong> ${tr.destino.toUpperCase()}
+        </div>
+
+        <table>
+          <thead>
+            <tr>
+              <th>CANTIDAD ENTREGADA AL FLETE</th>
+              <th>DESCRIPCIÓN DEL PRODUCTO / MERCADERÍA</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td style="font-size:20px; text-align:center; font-weight:bold;">${tr.qty}</td>
+              <td style="font-size:16px;">${tr.producto}</td>
+            </tr>
+          </tbody>
+        </table>
+
+        <div style="margin-top:30px; border:1px dashed #ccc; padding:15px; font-size:12px;">
+          <strong>Control de Arribo:</strong> Al recibir la mercadería en ${tr.destino.toUpperCase()}, el vendedor de turno debe controlar visualmente y luego ingresar al Sistema de Mercado de Cafeteras > Logística y presionar "Confirmar Recepción" para imputar el stock al local. En caso de discrepancias, presionar "Reportar Desvío".
+        </div>
+
+        <div class="signatures">
+          <div class="sign-box">Firma Responsable ORIGEN<br>(Entrega)</div>
+          <div class="sign-box">Firma Transportista / Flete <br>(Verifica Cantidad Cargada)</div>
+        </div>
+        <div style="text-align:center; font-size:10px; margin-top:50px; color:#666;">Documento válido para uso interno de control de stock. No válido como factura.</div>
+      </body>
+    </html>
+  `);
+  printWindow.document.close();
+  printWindow.focus();
+  setTimeout(() => {
+    printWindow.print();
+    printWindow.close();
+  }, 250);
+}
