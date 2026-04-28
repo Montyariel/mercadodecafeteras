@@ -144,13 +144,13 @@ window.renderDashboard = async function() {
           </thead>
           <tbody>
             ${DATA.repairs
-              .filter(r => r.estado === 'entregado' && (isAdmin || isWarehouse || r.sucursal === loc))
+              .filter(r => r.estado === 'entregado' && (isAdmin || isWarehouse || window.getRepairBranch(r) === loc))
               .slice(0, 5).map(r => `
               <tr>
                 <td style="font-weight:700;color:var(--gold-bright);">${r.id}</td>
                 <td>${r.cliente}</td>
                 <td style="font-size:12px;">${r.modelo}</td>
-                <td style="color:var(--text-muted);font-size:12px;">${r.fechaEntrega ? new Date(r.fechaEntrega).toLocaleDateString() : '—'}</td>
+                <td style="color:var(--text-muted);font-size:12px;">${(r.fechaEntrega || r.fecha_entrega) ? new Date(r.fechaEntrega || r.fecha_entrega).toLocaleDateString() : '—'}</td>
                 <td><span style="color:var(--green);font-size:11px;font-weight:700;">✅ Entregado</span></td>
               </tr>
             `).join('') || '<tr><td colspan="5" style="text-align:center;padding:20px;">No hay máquinas entregadas</td></tr>'}
@@ -170,7 +170,7 @@ window.renderDashboard = async function() {
             </thead>
             <tbody>
               ${DATA.repairs
-                .filter(r => r.estado !== 'entregado' && (isAdmin || isWarehouse || r.sucursal === loc))
+                .filter(r => r.estado !== 'entregado' && (isAdmin || isWarehouse || window.getRepairBranch(r) === loc))
                 .slice(0, 5).map(r => `
                 <tr>
                   <td style="color:var(--text-muted);font-size:11px;">${r.id}</td>

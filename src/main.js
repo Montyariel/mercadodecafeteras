@@ -180,4 +180,20 @@ window.init = function() {
   }
 };
 
+// ─── Utilidades Globales de Seguridad ────────
+window.getRepairBranch = function(r) {
+  if (!r) return 'lanus';
+  const id = String(r.id || '').toUpperCase();
+  
+  // 1. Blindaje por ID: Belgrano siempre empieza con B
+  if (id.startsWith('B')) return 'belgrano';
+  
+  // 2. Campo oficial de admisión
+  const admit = r.sucursal_admit || r.sucursalAdmit;
+  if (admit) return admit;
+  
+  // 3. Respaldo por ubicación física
+  return r.sucursal || 'lanus';
+};
+
 window.addEventListener('DOMContentLoaded', window.init);

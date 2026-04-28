@@ -16,8 +16,16 @@ async function renderTransfers() {
     console.warn('Usando mock data para traslados:', err);
   }
 
-  const solicitados = DATA.transfers.filter(t => t.estado === 'solicitado').length;
-  const enCamino = DATA.transfers.filter(t => t.estado === 'enviado').length;
+  const isAdmin = currentUser && currentUser.role === 'admin';
+  const isWarehouse = currentUser && currentUser.role === 'warehouse';
+  const loc = (currentUser && currentUser.location) ? currentUser.location : 'lanus';
+
+  const displayedTransfers = DATA.transfers.filter(t => 
+    isAdmin || isWarehouse || t.origen === loc || t.destino === loc
+  );
+
+  const solicitados = displayedTransfers.filter(t => t.estado === 'solicitado').length;
+  const enCamino = displayedTransfers.filter(t => t.estado === 'enviado').length;
 
   v.innerHTML = `
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:22px;flex-wrap:wrap;gap:12px;">
@@ -32,7 +40,7 @@ async function renderTransfers() {
     <div class="grid-3" style="margin-bottom:22px;">
       <div class="kpi-card">
         <div class="kpi-header"><span class="kpi-icon">🚚</span></div>
-        <div class="kpi-value">${DATA.transfers.length}</div>
+        <div class="kpi-value">${displayedTransfers.length}</div>
         <div class="kpi-label">Movimientos totales</div>
       </div>
       <div class="kpi-card">
@@ -55,9 +63,9 @@ async function renderTransfers() {
           </tr>
         </thead>
         <tbody>
-          ${DATA.transfers.length === 0 
+          ${displayedTransfers.length === 0 
             ? '<tr><td colspan="7" style="text-align:center;padding:32px;color:var(--text-muted);">No hay logística registrada</td></tr>'
-            : DATA.transfers.map(t => `
+            : displayedTransfers.map(t => `
             <tr style="background: ${t.estado==='con_error' ? 'rgba(235,87,87,0.05)' : 'transparent'};">
               <td style="font-weight:700; color:var(--gold-mid);">${String(t.id).replace(/-[0-9]+$/, '')}</td>
               <td style="color:var(--text-muted); font-size:11px;">${t.fecha}</td>
@@ -91,84 +99,9 @@ async function renderTransfers() {
       </table>
     </div>
 
-    <!-- Modal Enviar/Crear Traslado Oficial -->
-    <div class="modal-overlay" id="transfer-modal">
-      <div class="modal-box" style="width:500px; max-width:90%">
-        <div class="modal-title">📦 Preparar Envío Especial Múltiple</div>
-        
-        <div class="grid-2">
-          <div class="form-group">
-            <label class="form-label">Desde</label>
-            <select class="form-input" id="tr-origen" onchange="onTransferOrigenChange()">
-              <option value="deposito">Depósito Central</option>
-              <option value="lanus">Lanús</option>
-              <option value="belgrano">Belgrano</option>
-            </select>
-          </div>
-          <div class="form-group">
-            <label class="form-label">Hacia</label>
-            <select class="form-input" id="tr-destino">
-              <option value="lanus">Sucursal Lanús</option>
-              <option value="belgrano">Sucursal Belgrano</option>
-              <option value="deposito">Depósito Central</option>
-            </select>
-          </div>
-        </div>
-
-        <div style="background:var(--bg-card); padding:10px; border-radius:8px; border:1px solid var(--border-subtle); margin-bottom:15px; position:relative; z-index:9;">
-          <div style="display:flex; gap:10px; align-items:end;">
-            <div class="form-group" style="margin-bottom:0; flex:1;">
-              <label class="form-label">Producto a Mover</label>
-              <select class="form-input" id="tr-prod">
-                <!-- Llenado dinámicamente -->
-              </select>
-            </div>
-            <div class="form-group" style="margin-bottom:0; width:70px;">
-              <label class="form-label">Cant.</label>
-              <input type="number" id="tr-qty" class="form-input" value="1" min="1" />
-            </div>
-            <button class="btn btn-secondary" style="white-space:nowrap; padding: 10px 15px; height: 38px;" onclick="addTransferCartItem()">+ Agregar</button>
-          </div>
-        </div>
-
-        <div class="form-group">
-          <label class="form-label">Productos en este envío:</label>
-          <div id="transfer-cart-list" style="border:1px solid var(--border-subtle); border-radius:8px; min-height:80px; padding:10px; background:var(--bg-color); font-size:13px; max-height:150px; overflow-y:auto;">
-            <!-- Renderizado por JS -->
-          </div>
-        </div>
-
-        <div class="form-actions">
-          <button class="btn btn-ghost" onclick="closeTransferModal()">Cancelar</button>
-          <button class="btn btn-primary" onclick="createTransfer()">✅ Enviar Todo</button>
-        </div>
-      </div>
     </div>
-
-    <!-- Modal Solicitar Reposición (Para Vendedores) -->
-    <div class="modal-overlay" id="request-modal">
-      <div class="modal-box">
-        <div class="modal-title">🙋‍♂️ Solicitar Reposición de Mercadería</div>
-        <p style="font-size:12px; color:var(--text-muted); margin-bottom:15px;">Esto generará un aviso al depósito para que te lo envíen a tu local (${currentUser.location.toUpperCase()}). El stock no se altera hasta que ellos confirmen el envío.</p>
-        <div class="form-group">
-          <label class="form-label">¿Qué producto necesitas?</label>
-          <select class="form-input" id="req-prod" onchange="onRequestProdChange()">
-            ${DATA.stock.map(s => `<option value="${s.id}">${s.nombre}</option>`).join('')}
-          </select>
-          <div id="req-modal-stock-info" style="font-size:11px; color:var(--text-muted); margin-top:5px;"></div>
-        </div>
-        <div class="form-group">
-          <label class="form-label">¿Cuántas unidades faltan?</label>
-          <input type="number" id="req-qty" class="form-input" value="1" min="1" />
-        </div>
-        <div class="form-actions">
-          <button class="btn btn-ghost" onclick="closeRequestModal()">Cancelar</button>
-          <button class="btn btn-primary" onclick="createRequest()">📝 Enviar Solicitud</button>
-        </div>
-      </div>
-    </div>
-    
   `;
+}
 }
 
 function getTransferActions(t) {
@@ -263,16 +196,31 @@ function closeTransferModal() {
   document.getElementById('transfer-modal').classList.remove('active');
 }
 function openRequestModal(prodId = null) {
-  document.getElementById('request-modal').classList.add('active');
-  if (prodId) {
-    document.getElementById('req-prod').value = prodId;
+  const m = document.getElementById('request-modal');
+  if (!m) return;
+
+  m.classList.add('active');
+  
+  // Poblar select de productos si está vacío o para asegurar datos frescos
+  const prodSelect = document.getElementById('req-prod');
+  if (prodSelect) {
+    prodSelect.innerHTML = DATA.stock.map(s => `<option value="${s.id}">${s.nombre}</option>`).join('');
+    if (prodId) prodSelect.value = prodId;
   }
+
+  // Actualizar descripción con la ubicación del usuario
+  const desc = document.getElementById('request-modal-desc');
+  if (desc && window.currentUser) {
+    desc.textContent = `Esto generará un aviso al depósito para que te lo envíen a tu local (${window.currentUser.location.toUpperCase()}). El stock no se altera hasta que ellos confirmen el envío.`;
+  }
+
   if (typeof onRequestProdChange === 'function') {
     onRequestProdChange();
   }
 }
 function closeRequestModal() {
-  document.getElementById('request-modal').classList.remove('active');
+  const m = document.getElementById('request-modal');
+  if (m) m.classList.remove('active');
 }
 
 function onRequestProdChange() {

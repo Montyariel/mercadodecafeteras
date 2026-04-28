@@ -64,12 +64,17 @@ function renderHistoryRows() {
   const userLoc = currentUser ? currentUser.location : 'lanus';
 
   const delivered = DATA.repairs.filter(r => {
-    const isEntregado = r.estado === 'entregado' && r.fechaEntrega;
+    const deliveryDateVal = r.fechaEntrega || r.fecha_entrega;
+    const isEntregado = r.estado === 'entregado' && deliveryDateVal;
     if (!isEntregado) return false;
     
-    // Si no es admin, filtrar por sucursal
-    if (!isAdmin) {
-      return r.sucursal === userLoc;
+    const isAdmin = currentUser && currentUser.role === 'admin';
+    const isWarehouse = currentUser && currentUser.role === 'warehouse';
+
+    const repairBranch = window.getRepairBranch(r);
+    // Si no es admin o depósito, filtrar por sucursal de origen
+    if (!isAdmin && !isWarehouse) {
+      return repairBranch === userLoc;
     }
     return true;
   });
@@ -90,7 +95,8 @@ function renderHistoryRows() {
   empty.classList.add('hidden');
   tbody.innerHTML = filtered.map(r => {
     // Cálculo de garantía
-    const deliveryDate = new Date(r.fechaEntrega);
+    const deliveryDateVal = r.fechaEntrega || r.fecha_entrega;
+    const deliveryDate = new Date(deliveryDateVal);
     const today = new Date();
     const diffTime = Math.abs(today - deliveryDate);
     const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
@@ -161,9 +167,14 @@ function viewArchiveDetails(repairId) {
                     </div>
                     <div>
                         <div style="font-size:10px; color:var(--text-muted); text-transform:uppercase;">Sucursal</div>
-                        <div style="font-weight:600;">${r.sucursal === 'lanus' ? 'Lanús' : 'Belgrano'}</div>
+                        <div style="font-weight:600;">${(r.sucursal_admit || r.sucursalAdmit || r.sucursal) === 'lanus' ? 'Lanús' : 'Belgrano'}</div>
                     </div>
                 </div>
+                ${(r.isOster || r.is_oster) ? `
+                <div style="margin-top:10px; background:rgba(200,140,60,0.1); padding:10px; border-radius:4px; border:1px solid var(--gold-bright);">
+                    <div style="font-size:10px; color:var(--gold-bright); text-transform:uppercase; font-weight:700;">Garantía Oficial Oster</div>
+                    <div style="font-size:13px;"><b>Nro Operación:</b> ${r.osterOp || r.oster_op}</div>
+                </div>` : ''}
                 <div style="margin-top:15px; padding-top:15px; border-top:1px solid var(--border-subtle);">
                    <div style="font-size:10px; color:var(--text-muted); text-transform:uppercase;">Falla Recibida</div>
                    <div style="font-style:italic; font-size:13px; color:var(--text-secondary);">"${r.problema}"</div>

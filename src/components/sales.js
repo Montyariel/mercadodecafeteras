@@ -300,6 +300,10 @@ function addPayment() {
      const recargo = baseAmount * 0.10;
      finalAmount = Math.round(baseAmount + recargo);
      label = `Tarjeta de Crédito (+10% recargo)`;
+  } else if (method === 'Efectivo') {
+     const descuento = baseAmount * 0.10;
+     finalAmount = Math.round(baseAmount - descuento);
+     label = `Efectivo (-10% descuento)`;
   }
   
   salePayments.push({ method: label, amount: finalAmount, baseAmount: baseAmount });

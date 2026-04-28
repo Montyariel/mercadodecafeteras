@@ -4,11 +4,7 @@
 
 let repairsFilter = 'all';
 
-function toggleOsterField() {
-  const isOster = document.getElementById('is-oster').checked;
-  const group = document.getElementById('oster-field-group');
-  if (group) group.classList.toggle('hidden', !isOster);
-}
+// Eliminado toggleOsterField por redundancia
 
 function generateNextRepairId(branch) {
   const prefix = branch === 'lanus' ? 'L-' : 'B-';
@@ -87,11 +83,10 @@ async function renderRepairs() {
         </div>
         <div class="grid-2">
           <div class="form-group">
-            <label class="form-label">Sucursal</label>
-            <select class="form-input" id="rep-sucursal" onchange="onBranchChange()">
-              <option value="lanus">Lanús</option>
-              <option value="belgrano">Belgrano</option>
-            </select>
+            <label class="form-label">Sucursal de Ingreso</label>
+            <div id="sucursal-container">
+               <!-- Se llena dinámicamente en openRepairModal -->
+            </div>
           </div>
           <div class="form-group">
             <label class="form-label">Prioridad</label>
@@ -104,15 +99,15 @@ async function renderRepairs() {
         </div>
 
         <div style="background:rgba(200,140,60,0.05); border:1px solid var(--border-subtle); border-radius:var(--radius-sm); padding:12px; margin-bottom:15px;">
-           <div class="form-group" style="margin-bottom:0; display:flex; align-items:center; gap:10px;">
-             <input type="checkbox" id="is-oster" onchange="toggleOsterField()" style="width:18px;height:18px;cursor:pointer;" />
-             <label for="is-oster" style="font-weight:600; font-size:14px; color:var(--text-primary); cursor:pointer;">¿Es Garantía Oficial Oster?</label>
+           <div class="form-group" style="margin-bottom:0;">
+             <label class="form-label">Tipo de Servicio / Garantía</label>
+             <select class="form-input" id="rep-tipo-servicio">
+               <option value="particular">🛠️ Presupuesto Particular</option>
+               <option value="oster">🛡️ Garantía Oficial Oster</option>
+               <option value="peabody">🛡️ Garantía Oficial Peabody</option>
+             </select>
            </div>
-           <div id="oster-field-group" class="hidden" style="margin-top:10px; border-top:1px solid var(--border-subtle); padding-top:10px;">
-             <label class="form-label">Número de Operación Oster</label>
-             <input class="form-input" id="rep-oster-op" type="text" placeholder="Ej: OP-456900" />
-             <p style="font-size:11px; color:var(--text-muted); margin-top:4px;">* Las reparaciones de garantía Oster no generan cobro al cliente.</p>
-           </div>
+           <p style="font-size:11px; color:var(--text-muted); margin-top:8px;">* Para garantías oficiales, los datos de operación se cargarán luego del diagnóstico.</p>
         </div>
         <div class="form-actions">
           <button class="btn btn-ghost" onclick="closeRepairModal()">Cancelar</button>
@@ -153,10 +148,23 @@ async function renderRepairs() {
         </div>
 
         <!-- Mano de obra -->
-        <div class="form-group">
+        <div class="form-group" id="mano-obra-group">
           <label class="form-label">🛠️ Mano de obra ($)</label>
           <input class="form-input" id="mano-obra" type="number" min="0" placeholder="0"
             oninput="recalcTotal()" />
+        </div>
+
+        <!-- Campos Garantía Oficial (Solo si aplica) -->
+        <div id="warranty-fields-group" class="hidden" style="background:rgba(200,140,60,0.05); padding:12px; border-radius:8px; border:1px solid var(--border-subtle); margin-bottom:15px;">
+          <div style="font-size:11px; color:var(--gold-bright); font-weight:700; margin-bottom:10px; text-transform:uppercase;">Datos Requeridos para Garantía</div>
+          <div class="form-group">
+            <label class="form-label">Número de Operación</label>
+            <input class="form-input" id="presu-warranty-op" type="text" placeholder="Ej: OP-998877" />
+          </div>
+          <div class="form-group">
+            <label class="form-label">Email del Cliente</label>
+            <input class="form-input" id="presu-warranty-email" type="email" placeholder="cliente@email.com" />
+          </div>
         </div>
 
         <!-- Total calculado -->
@@ -214,10 +222,22 @@ function renderKanban() {
     { key: 'listo',    label: '🟢 Listo para entregar',  cls: 'col-done'     },
   ];
 
+  const isAdmin = currentUser && currentUser.role === 'admin';
+  const isWarehouse = currentUser && currentUser.role === 'warehouse';
+  const userLoc = currentUser ? currentUser.location : 'lanus';
+
   board.innerHTML = columns.map(col => {
-    const cards = DATA.repairs.filter(r =>
-      r.estado === col.key && (repairsFilter === 'all' || repairsFilter === col.key)
-    );
+    const cards = DATA.repairs.filter(r => {
+      const matchState = r.estado === col.key && (repairsFilter === 'all' || repairsFilter === col.key);
+      if (!matchState) return false;
+
+      const repairBranch = window.getRepairBranch(r);
+      // Si no es admin o depósito, filtrar por sucursal de origen
+      if (!isAdmin && !isWarehouse) {
+        return repairBranch === userLoc;
+      }
+      return true;
+    });
     return `
       <div class="kanban-col ${col.cls}">
         <div class="kanban-col-header">
@@ -240,19 +260,22 @@ function repairCardHTML(r, colKey) {
   const prioColor = { alta: 'var(--red)', media: 'var(--yellow)', baja: 'var(--green)' };
 
   // Sucursal de admisión vs física (Logística de taller)
-  const admitBranch = r.sucursal_admit || r.sucursal;
+  const admitBranch = r.sucursal_admit || r.sucursalAdmit || r.sucursal;
   
   let locBadge = '';
-  if (admitBranch === 'belgrano' && r.sucursal === 'belgrano' && r.estado !== 'listo' && r.estado !== 'entregado') {
+  if (admitBranch === 'belgrano' && r.estado === 'progreso') {
+     locBadge = `<span style="font-size:9px;background:rgba(76,175,130,0.15);color:var(--green);padding:2px 6px;border-radius:4px;margin-left:5px;border:1px solid rgba(76,175,130,0.3);">📍 En Taller</span>`;
+  } else if (admitBranch === 'belgrano' && r.sucursal === 'belgrano' && r.estado === 'recibido') {
      locBadge = `<span style="font-size:9px;background:rgba(235,87,87,0.15);color:var(--red);padding:2px 6px;border-radius:4px;margin-left:5px;border:1px solid rgba(235,87,87,0.3);">🚚 En envío a Taller</span>`;
   } else if (admitBranch === 'belgrano' && r.sucursal === 'lanus') {
      locBadge = `<span style="font-size:9px;background:rgba(76,175,130,0.15);color:var(--green);padding:2px 6px;border-radius:4px;margin-left:5px;border:1px solid rgba(76,175,130,0.3);">📍 En Taller Lanús</span>`;
   }
 
   // Bloque de diagnóstico técnico (si existe)
-  const diagBlock = r.diagnosticoTecnico
+  const diagVal = r.diagnosticoTecnico || r.diagnostico_tecnico;
+  const diagBlock = diagVal
     ? `<div style="font-size:11px;color:var(--text-secondary);margin-top:8px;padding:6px;background:rgba(255,255,255,0.03);border-radius:4px;border-left:2px solid var(--gold-bright);">
-        <b style="color:var(--gold-bright);">Diagnóstico:</b> ${r.diagnosticoTecnico}
+        <b style="color:var(--gold-bright);">Diagnóstico:</b> ${diagVal}
        </div>`
     : '';
 
@@ -261,6 +284,10 @@ function repairCardHTML(r, colKey) {
     ? `<span style="background:var(--green);color:#fff;font-size:9px;padding:2px 6px;border-radius:4px;font-weight:700;margin-left:8px;">APROBADO</span>`
     : (r.presupuesto ? `<span style="background:var(--yellow);color:#000;font-size:9px;padding:2px 6px;border-radius:4px;font-weight:700;margin-left:8px;">PDTE. APROBACIÓN</span>` : '');
 
+  const isOsterVal = r.isOster || r.is_oster;
+  const isPeabodyVal = r.isPeabody || r.is_peabody;
+  const warrantyLabel = isOsterVal ? 'OSTER' : (isPeabodyVal ? 'PEABODY' : '');
+
   const presupuestoBlock = r.presupuesto
     ? `<div style="
           margin-top:10px;
@@ -268,22 +295,27 @@ function repairCardHTML(r, colKey) {
           border:1px solid var(--border-glow);
           border-radius:6px;padding:8px 10px;">
         <div style="font-size:10px;text-transform:uppercase;letter-spacing:1px;color:var(--text-muted);margin-bottom:4px;display:flex;justify-content:space-between;">
-           <span>Presupuesto ${r.isOster ? '(OSTER)' : ''}</span>
+           <span>Presupuesto ${warrantyLabel ? `(${warrantyLabel})` : ''}</span>
            ${statusBadge}
         </div>
         ${r.presupuesto.componentes.map(c =>
           `<div style="font-size:11px;color:var(--text-secondary);display:flex;justify-content:space-between;">
-            <span>• ${c.nombre}</span><span>${r.isOster ? '$0' : formatCurrency(c.precio)}</span>
+            <span>• ${c.nombre}</span><span>${isOsterVal ? '$0' : formatCurrency(c.precio)}</span>
            </div>`
         ).join('')}
         ${r.presupuesto.manoObra > 0
           ? `<div style="font-size:11px;color:var(--text-secondary);display:flex;justify-content:space-between;">
-               <span>• Mano de obra</span><span>${r.isOster ? '$0' : formatCurrency(r.presupuesto.manoObra)}</span>
+               <span>• Mano de obra</span><span>${isOsterVal ? '$0' : formatCurrency(r.presupuesto.manoObra)}</span>
              </div>` : ''}
         <div style="display:flex;justify-content:space-between;margin-top:6px;padding-top:6px;border-top:1px solid var(--border-subtle);">
           <span style="font-size:12px;font-weight:700;color:var(--text-primary);">Total</span>
           <span style="font-size:14px;font-weight:800;color:var(--gold-bright);">${formatCurrency(r.presupuesto.total)}</span>
         </div>
+        ${(isOsterVal || isPeabodyVal) ? `
+          <div style="font-size:9px; color:var(--gold-bright); margin-top:5px; font-weight:600;">
+            ${(r.oster_op || r.peabody_op) ? `OP: ${r.oster_op || r.peabody_op}` : '⚠️ PENDIENTE Nº OPERACIÓN'}
+          </div>
+        ` : ''}
       </div>`
     : '';
 
@@ -331,7 +363,12 @@ function repairCardHTML(r, colKey) {
         <span style="width:8px;height:8px;border-radius:50%;background:${prioColor[r.prioridad]};flex-shrink:0;margin-top:2px;"
           title="Prioridad ${r.prioridad}"></span>
       </div>
-      <div class="repair-card-title">${r.modelo} ${r.isOster ? '<span style="color:var(--gold-bright);font-size:10px;">(OSTER)</span>' : ''} ${locBadge}</div>
+      <div class="repair-card-title">
+        ${r.modelo} 
+        ${isOsterVal ? '<span style="color:var(--gold-bright);font-size:10px;">(OSTER)</span>' : ''} 
+        ${isPeabodyVal ? '<span style="color:var(--gold-bright);font-size:10px;">(PEABODY)</span>' : ''} 
+        ${locBadge}
+      </div>
       <div class="repair-card-client">👤 ${r.cliente}</div>
       <div style="font-size:11px;color:var(--text-muted);margin-top:4px;">📞 ${r.celular}</div>
       <div style="font-size:12px;color:var(--text-secondary);margin-top:6px;font-style:italic;">"${r.problema}"</div>
@@ -435,10 +472,21 @@ function openPresupuestoModal(repairId) {
   document.getElementById('mano-obra').value = '';
   document.getElementById('diag-tecnico').value = r.diagnosticoTecnico || '';
 
-  // Badge Oster
+  // Manejo de Garantías Oficiales en el modal de presupuesto
+  const isOfficialWarranty = (r.isOster || r.is_oster || r.isPeabody || r.is_peabody);
+  const warrantyGroup = document.getElementById('warranty-fields-group');
   const badOster = document.getElementById('oster-badge-presu');
-  if (r.isOster) badOster.classList.remove('hidden');
-  else badOster.classList.add('hidden');
+
+  if (isOfficialWarranty) {
+    warrantyGroup.classList.remove('hidden');
+    badOster.classList.remove('hidden');
+    badOster.textContent = `GARANTÍA OFICIAL ${(r.isOster || r.is_oster) ? 'OSTER' : 'PEABODY'} ($0)`;
+    document.getElementById('presu-warranty-op').value = r.osterOp || r.oster_op || r.peabodyOp || r.peabody_op || '';
+    document.getElementById('presu-warranty-email').value = r.clienteEmail || r.cliente_email || '';
+  } else {
+    warrantyGroup.classList.add('hidden');
+    badOster.classList.add('hidden');
+  }
 
   if (r.presupuesto) {
     r.presupuesto.componentes.forEach(c => {
@@ -446,8 +494,6 @@ function openPresupuestoModal(repairId) {
       else addComponenteRow(c.nombre, c.precio);
     });
     document.getElementById('mano-obra').value = r.presupuesto.manoObra || 0;
-  } else {
-    // No agregamos fila vacía por defecto para que el usuario elija
   }
 
   recalcTotal();
@@ -536,7 +582,7 @@ function recalcTotal() {
   
   const r = DATA.repairs.find(x => x.id === _presupuestoRepairId);
   const subtotal  = precios.reduce((a, b) => a + b, 0);
-  const total     = r?.isOster ? 0 : (subtotal + manoObra);
+  const total     = (r?.isOster || r?.is_oster || r?.isPeabody || r?.is_peabody) ? 0 : (subtotal + manoObra);
   
   const el        = document.getElementById('presupuesto-total');
   if (el) el.textContent = formatCurrency(total);
@@ -566,20 +612,33 @@ function collectPresupuestoData() {
   }
 
   const r = DATA.repairs.find(x => x.id === _presupuestoRepairId);
-  const total = r?.isOster ? 0 : (componentes.reduce((a, c) => a + c.precio, 0) + manoObra);
+  const total = (r?.isOster || r?.is_oster || r?.isPeabody || r?.is_peabody) ? 0 : (componentes.reduce((a, c) => a + c.precio, 0) + manoObra);
   return { componentes, manoObra, total };
 }
 
 // Guardar presupuesto en el objeto de reparación
-async function guardarPresupuesto(silencioso = false) {
   const r = DATA.repairs.find(x => x.id === _presupuestoRepairId);
   if (!r) return;
 
+  const isOfficialWarranty = (r.isOster || r.is_oster || r.isPeabody || r.is_peabody);
   const diag = document.getElementById('diag-tecnico').value.trim();
-  r.diagnosticoTecnico = diag;
+  const opNumber = document.getElementById('presu-warranty-op').value.trim();
+  const clientEmail = document.getElementById('presu-warranty-email').value.trim();
 
+  if (isOfficialWarranty) {
+    if (!opNumber || !clientEmail) {
+      showToast('⚠️ Para garantías oficiales, el Nº de Operación y el Email son obligatorios después del diagnóstico', 'error');
+      return;
+    }
+    r.oster_op = r.is_oster ? opNumber : '';
+    r.peabody_op = r.is_peabody ? opNumber : '';
+    r.cliente_email = clientEmail;
+  }
+
+  r.diagnosticoTecnico = diag;
   const data = collectPresupuestoData();
-  if (data.componentes.length === 0 && data.manoObra === 0 && !r.isOster) {
+  
+  if (data.componentes.length === 0 && data.manoObra === 0 && !isOfficialWarranty) {
     showToast('⚠️ Agregá al menos un componente o la mano de obra', 'error');
     return;
   }
@@ -589,10 +648,16 @@ async function guardarPresupuesto(silencioso = false) {
   // Persistir en Supabase
   try {
     if (SUPABASE_KEY !== 'TU_ANON_KEY_AQUI') {
-      await db.repairs.update(r.id, { 
+      const updates = { 
         presupuesto: data, 
         diagnostico_tecnico: diag 
-      });
+      };
+      if (isOfficialWarranty) {
+        updates.oster_op = r.oster_op;
+        updates.peabody_op = r.peabody_op;
+        updates.cliente_email = r.cliente_email;
+      }
+      await db.repairs.update(r.id, updates);
     }
   } catch (err) {
     console.error('Error al guardar presupuesto en Supabase:', err);
@@ -656,13 +721,13 @@ function _enviarPresupuestoMsj(r, data) {
     `Te informamos el diagnóstico de tu *${r.modelo}* (${r.id}):`,
     ``,
     `🔍 *Problema detectado:* ${r.problema}`,
-    r.diagnosticoTecnico ? `🔩 *Diagnóstico Técnico:* ${r.diagnosticoTecnico}` : '',
+    r.diagnostico_tecnico || r.diagnosticoTecnico ? `🔩 *Diagnóstico Técnico:* ${r.diagnostico_tecnico || r.diagnosticoTecnico}` : '',
     ``,
-    r.isOster ? `🛡️ *Este equipo ingresó por Garantía Oficial Oster.*` : `🔩 *Repuestos a reemplazar:*`,
-    ...(r.isOster ? [] : data.componentes.map(c => `  • ${c.nombre}: ${formatCurrency(c.precio)}`)),
-    (!r.isOster && data.manoObra > 0) ? `  • Mano de obra: ${formatCurrency(data.manoObra)}` : '',
+    (r.isOster || r.is_oster) ? `🛡️ *Este equipo ingresó por Garantía Oficial Oster.*` : `🔩 *Repuestos a reemplazar:*`,
+    ...((r.isOster || r.is_oster) ? [] : data.componentes.map(c => `  • ${c.nombre}: ${formatCurrency(c.precio)}`)),
+    (!(r.isOster || r.is_oster) && data.manoObra > 0) ? `  • Mano de obra: ${formatCurrency(data.manoObra)}` : '',
     ``,
-    r.isOster ? `💰 *COSTO REPARACIÓN: SIN CARGO ($0)*` : `💰 *TOTAL DEL PRESUPUESTO: ${formatCurrency(data.total)}*`,
+    (r.isOster || r.is_oster) ? `💰 *COSTO REPARACIÓN: SIN CARGO ($0)*` : `💰 *TOTAL DEL PRESUPUESTO: ${formatCurrency(data.total)}*`,
     ``,
     `Por favor confirmanos si aprobás la reparación para coordinar la entrega.`,
     ``,
@@ -677,19 +742,37 @@ function _enviarPresupuestoMsj(r, data) {
 
 // ─── Modal nueva reparación ───────────────
 function openRepairModal()  {
-  document.getElementById('rep-id-manual').value = '';
+  // Limpiar campos
   document.getElementById('rep-modelo').value = '';
   document.getElementById('rep-cliente').value = '';
   document.getElementById('rep-cel').value = '';
   document.getElementById('rep-problema').value = '';
-  document.getElementById('is-oster').checked = false;
-  document.getElementById('rep-oster-op').value = '';
-  document.getElementById('oster-field-group').classList.add('hidden');
   
-  // Auto-ID
-  const defaultBranch = currentUser.location || 'lanus';
-  document.getElementById('rep-sucursal').value = defaultBranch;
-  document.getElementById('rep-id-manual').value = generateNextRepairId(defaultBranch);
+  // Auto-ID y Bloqueo de Sucursal RIGUROSO
+  const userLoc = (window.currentUser && window.currentUser.location) ? window.currentUser.location : 'lanus';
+  const isAdmin = window.currentUser && window.currentUser.role === 'admin';
+  const container = document.getElementById('sucursal-container');
+  
+  if (isAdmin) {
+    // Admin puede elegir
+    container.innerHTML = `
+      <select class="form-input" id="rep-sucursal" onchange="onBranchChange()">
+        <option value="lanus" ${userLoc === 'lanus' ? 'selected' : ''}>Lanús</option>
+        <option value="belgrano" ${userLoc === 'belgrano' ? 'selected' : ''}>Belgrano</option>
+      </select>
+    `;
+  } else {
+    // Vendedor NO puede elegir ni ver el dropdown
+    const locName = userLoc === 'lanus' ? 'Lanús' : 'Belgrano';
+    container.innerHTML = `
+      <input type="text" class="form-input" value="${locName}" readonly style="background:rgba(255,255,255,0.05); cursor:not-allowed;" />
+      <input type="hidden" id="rep-sucursal" value="${userLoc}" />
+    `;
+  }
+
+  const finalBranch = document.getElementById('rep-sucursal').value;
+  document.getElementById('rep-id-manual').value = generateNextRepairId(finalBranch);
+  document.getElementById('rep-tipo-servicio').value = 'particular';
 
   document.getElementById('repair-modal').classList.add('active'); 
 }
@@ -703,16 +786,12 @@ async function saveRepair() {
   const problema = document.getElementById('rep-problema').value.trim();
   const sucursal = document.getElementById('rep-sucursal').value;
   const prioridad= document.getElementById('rep-prioridad').value;
-  const isOster  = document.getElementById('is-oster').checked;
-  const oster_op = document.getElementById('rep-oster-op').value.trim();
+  const tipoServicio = document.getElementById('rep-tipo-servicio').value;
+  const isOster = tipoServicio === 'oster';
+  const isPeabody = tipoServicio === 'peabody';
 
   if (!manualId || !modelo || !cliente || !problema) {
-    showToast('⚠️ Completá todos los campos, incluyendo el número de reparación', 'error');
-    return;
-  }
-
-  if (isOster && !oster_op) {
-    showToast('⚠️ Para garantía Oster, el número de operación es obligatorio', 'error');
+    showToast('⚠️ Completá todos los campos requeridos', 'error');
     return;
   }
 
@@ -727,10 +806,11 @@ async function saveRepair() {
 
   const newRepair = { 
     id: manualId, modelo, cliente, celular: cel || '—', problema, fecha, 
-    sucursal_admit: sucursal, // Match database schema
-    sucursal: sucursal, // Initial state, without forcing
+    sucursal_admit: sucursal,
+    sucursal: sucursal,
     estado: 'recibido', prioridad,
-    is_oster: isOster, oster_op: isOster ? oster_op : '',
+    is_oster: isOster, is_peabody: isPeabody,
+    oster_op: '', peabody_op: '', cliente_email: '',
     diagnostico_tecnico: '', aprobado: false
   };
 

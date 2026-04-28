@@ -118,7 +118,82 @@
     </main>
   </div>
 
-  <!-- Conexión Database -->
+  <!-- Modales Globales de Logística -->
+  <div class="modal-overlay" id="transfer-modal">
+    <div class="modal-box" style="width:500px; max-width:90%">
+      <div class="modal-title">📦 Preparar Envío Especial Múltiple</div>
+      
+      <div class="grid-2">
+        <div class="form-group">
+          <label class="form-label">Desde</label>
+          <select class="form-input" id="tr-origen" onchange="onTransferOrigenChange()">
+            <option value="deposito">Depósito Central</option>
+            <option value="lanus">Lanús</option>
+            <option value="belgrano">Belgrano</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Hacia</label>
+          <select class="form-input" id="tr-destino">
+            <option value="lanus">Sucursal Lanús</option>
+            <option value="belgrano">Sucursal Belgrano</option>
+            <option value="deposito">Depósito Central</option>
+          </select>
+        </div>
+      </div>
+
+      <div style="background:var(--bg-card); padding:10px; border-radius:8px; border:1px solid var(--border-subtle); margin-bottom:15px; position:relative; z-index:9;">
+        <div style="display:flex; gap:10px; align-items:end;">
+          <div class="form-group" style="margin-bottom:0; flex:1;">
+            <label class="form-label">Producto a Mover</label>
+            <select class="form-input" id="tr-prod">
+              <!-- Llenado dinámicamente -->
+            </select>
+          </div>
+          <div class="form-group" style="margin-bottom:0; width:70px;">
+            <label class="form-label">Cant.</label>
+            <input type="number" id="tr-qty" class="form-input" value="1" min="1" />
+          </div>
+          <button class="btn btn-secondary" style="white-space:nowrap; padding: 10px 15px; height: 38px;" onclick="addTransferCartItem()">+ Agregar</button>
+        </div>
+      </div>
+
+      <div class="form-group">
+        <label class="form-label">Productos en este envío:</label>
+        <div id="transfer-cart-list" style="border:1px solid var(--border-subtle); border-radius:8px; min-height:80px; padding:10px; background:var(--bg-color); font-size:13px; max-height:150px; overflow-y:auto;">
+          <!-- Renderizado por JS -->
+        </div>
+      </div>
+
+      <div class="form-actions">
+        <button class="btn btn-ghost" onclick="closeTransferModal()">Cancelar</button>
+        <button class="btn btn-primary" onclick="createTransfer()">✅ Enviar Todo</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="modal-overlay" id="request-modal">
+    <div class="modal-box">
+      <div class="modal-title">🙋‍♂️ Solicitar Reposición de Mercadería</div>
+      <p id="request-modal-desc" style="font-size:12px; color:var(--text-muted); margin-bottom:15px;">Esto generará un aviso al depósito para que te lo envíen a tu local. El stock no se altera hasta que ellos confirmen el envío.</p>
+      <div class="form-group">
+        <label class="form-label">¿Qué producto necesitas?</label>
+        <select class="form-input" id="req-prod" onchange="onRequestProdChange()">
+          <!-- Cargado dinámicamente -->
+        </select>
+        <div id="req-modal-stock-info" style="font-size:11px; color:var(--text-muted); margin-top:5px;"></div>
+      </div>
+      <div class="form-group">
+        <label class="form-label">¿Cuántas unidades faltan?</label>
+        <input type="number" id="req-qty" class="form-input" value="1" min="1" />
+      </div>
+      <div class="form-actions">
+        <button class="btn btn-ghost" onclick="closeRequestModal()">Cancelar</button>
+        <button class="btn btn-primary" onclick="createRequest()">📝 Enviar Solicitud</button>
+      </div>
+    </div>
+  </div>
+
   <script src="src/data/supabaseClient.js"></script>
   <script src="src/data/mockData.js"></script>
   <script src="src/components/login.js"></script>

@@ -90,13 +90,13 @@ function printAdmissionReceipt(repairId) {
         <div class="section">
             <div class="section-title">Detalle del Equipo</div>
             <div class="row"><span class="label">Modelo:</span> <span class="value">${r.modelo}</span></div>
-            ${r.isOster ? `
+            ${(r.isOster || r.is_oster || r.isPeabody || r.is_peabody) ? `
             <div style="background:#fff8ee; border:1px solid #c9973a; border-radius:4px; padding:10px; margin-top:10px; margin-bottom:10px;">
                 <div style="color:#c9973a; font-weight:800; font-size:12px; text-transform:uppercase; display:flex; align-items:center; gap:6px;">
-                    🛡️ Garantía Oficial Oster
+                    🛡️ Garantía Oficial ${(r.isOster || r.is_oster) ? 'Oster' : 'Peabody'}
                 </div>
-                <div style="font-size:13px; margin-top:4px;"><b>Nº Operación:</b> ${r.osterOp}</div>
-                <div style="font-size:11px; color:#a08060; margin-top:2px;">* Reparación sin cargo para el cliente.</div>
+                <div style="font-size:13px; margin-top:4px;"><b>Nº Operación:</b> ${r.osterOp || r.oster_op || r.peabodyOp || r.peabody_op || '<span style="color:#a08060; font-style:italic;">Pendiente de diagnóstico</span>'}</div>
+                <div style="font-size:11px; color:#a08060; margin-top:2px;">* Reparación sin cargo para el cliente. Sujeta a validación de garantía.</div>
             </div>` : ''}
             <div class="row"><span class="label">Diagnóstico Inicial:</span></div>
             <div class="problem-box">"${r.problema}"</div>

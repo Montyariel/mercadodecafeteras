@@ -1,4 +1,4 @@
-﻿// ==========================================
+// ==========================================
 // DASHBOARD — Mercado de Cafeteras
 // ==========================================
 
@@ -142,7 +142,7 @@ async function renderDashboard() {
               <td style="font-weight:700;color:var(--gold-bright);">${r.id}</td>
               <td>${r.cliente}</td>
               <td style="font-size:12px;">${r.modelo}</td>
-              <td style="color:var(--text-muted);font-size:12px;">${r.fechaEntrega ? new Date(r.fechaEntrega).toLocaleDateString() : '—'}</td>
+              <td style="color:var(--text-muted);font-size:12px;">${(r.fechaEntrega || r.fecha_entrega) ? new Date(r.fechaEntrega || r.fecha_entrega).toLocaleDateString() : '—'}</td>
               <td><span style="color:var(--green);font-size:11px;font-weight:700;">✅ Entregado</span></td>
             </tr>
           `).join('') || '<tr><td colspan="5" style="text-align:center;padding:20px;color:var(--text-muted);">No hay máquinas entregadas recientemente</td></tr>'}
