@@ -28,7 +28,7 @@ function onBranchChange() {
 
 
 // ─── Render principal ─────────────────────
-async function renderRepairs() {
+window.renderRepairs = async function renderRepairs() {
   const v = document.getElementById('view-repairs');
   
   // Mostrar loading o usar mock mientras carga
@@ -206,13 +206,13 @@ async function renderRepairs() {
 }
 
 // ─── Filtro ──────────────────────────────
-function filterRepairs(f) {
+window.filterRepairs = function filterRepairs(f) {
   repairsFilter = f;
   renderRepairs();
 }
 
 // ─── Kanban ──────────────────────────────
-function renderKanban() {
+window.renderKanban = function renderKanban() {
   const board = document.getElementById('kanban-board');
   if (!board) return;
 
@@ -256,7 +256,7 @@ function renderKanban() {
 }
 
 // ─── Tarjeta kanban ───────────────────────
-function repairCardHTML(r, colKey) {
+window.repairCardHTML = function repairCardHTML(r, colKey) {
   const prioColor = { alta: 'var(--red)', media: 'var(--yellow)', baja: 'var(--green)' };
 
   // Sucursal de admisión vs física (Logística de taller)
@@ -390,7 +390,7 @@ function repairCardHTML(r, colKey) {
 }
 
 // ─── Avanzar estado ───────────────────────
-async function advanceRepair(id, newState) {
+window.advanceRepair = async function advanceRepair(id, newState) {
   const repair = DATA.repairs.find(r => r.id === id);
   if (repair) {
     repair.estado = newState;
@@ -422,7 +422,7 @@ async function advanceRepair(id, newState) {
 }
 
 // ─── Avisar cliente (listo) ───────────────
-function notifyClient(id) {
+window.notifyClient = function notifyClient(id) {
   const r = DATA.repairs.find(r => r.id === id);
   if (!r) return;
   const precio = r.presupuesto ? ` El costo total fue de *${formatCurrency(r.presupuesto.total)}*.` : '';
@@ -441,7 +441,7 @@ function notifyClient(id) {
 let _presupuestoRepairId = null;
 let _componenteCount     = 0;
 
-function openPresupuestoModal(repairId) {
+window.openPresupuestoModal = function openPresupuestoModal(repairId) {
   _presupuestoRepairId = repairId;
   _componenteCount     = 0;
 
@@ -500,13 +500,13 @@ function openPresupuestoModal(repairId) {
   document.getElementById('presupuesto-modal').classList.add('active');
 }
 
-function closePresupuestoModal() {
+window.closePresupuestoModal = function closePresupuestoModal() {
   document.getElementById('presupuesto-modal').classList.remove('active');
   _presupuestoRepairId = null;
 }
 
 // Agrega una fila de componente al formulario
-function addComponenteRow(nombre = '', precio = '') {
+window.addComponenteRow = function addComponenteRow(nombre = '', precio = '') {
   const id   = ++_componenteCount;
   const list = document.getElementById('componentes-list');
   if (!list) return;
@@ -529,7 +529,7 @@ function addComponenteRow(nombre = '', precio = '') {
 }
 
 // Agrega una fila que selecciona del stock
-function addStockComponentRow(stockId = '', nombre = '', precio = '') {
+window.addStockComponentRow = function addStockComponentRow(stockId = '', nombre = '', precio = '') {
   const id   = ++_componenteCount;
   const list = document.getElementById('componentes-list');
   if (!list) return;
@@ -557,7 +557,7 @@ function addStockComponentRow(stockId = '', nombre = '', precio = '') {
   if (stockId) updateRowPrice(id);
 }
 
-function updateRowPrice(rowId) {
+window.updateRowPrice = function updateRowPrice(rowId) {
   const sId = document.getElementById(`comp-stockid-${rowId}`).value;
   const item = DATA.stock.find(s => s.id == sId);
   if (item) {
@@ -566,14 +566,14 @@ function updateRowPrice(rowId) {
   }
 }
 
-function removeComponenteRow(id) {
+window.removeComponenteRow = function removeComponenteRow(id) {
   const row = document.getElementById(`comp-row-${id}`);
   if (row) row.remove();
   recalcTotal();
 }
 
 // Recalcula el total en tiempo real
-function recalcTotal() {
+window.recalcTotal = function recalcTotal() {
   const lista     = document.getElementById('componentes-list');
   if (!lista) return;
   const precios   = Array.from(lista.querySelectorAll('input[type=number]'))
@@ -589,7 +589,7 @@ function recalcTotal() {
 }
 
 // Recolecta los datos del formulario del modal
-function collectPresupuestoData() {
+window.collectPresupuestoData = function collectPresupuestoData() {
   const lista      = document.getElementById('componentes-list');
   const manoObra   = parseFloat(document.getElementById('mano-obra')?.value) || 0;
   const componentes = [];
@@ -617,6 +617,7 @@ function collectPresupuestoData() {
 }
 
 // Guardar presupuesto en el objeto de reparación
+window.guardarPresupuesto = async function guardarPresupuesto(silencioso = false) {
   const r = DATA.repairs.find(x => x.id === _presupuestoRepairId);
   if (!r) return;
 
@@ -671,7 +672,7 @@ function collectPresupuestoData() {
 }
 
 // Función para aprobar y descontar stock
-function aprobarYGuardar() {
+window.aprobarYGuardar = function aprobarYGuardar() {
   const r = DATA.repairs.find(x => x.id === _presupuestoRepairId);
   if (!r) return;
 
@@ -700,7 +701,7 @@ function aprobarYGuardar() {
 }
 
 // Enviar presupuesto por WhatsApp desde el modal
-function enviarPresupuestoWA() {
+window.enviarPresupuestoWA = function enviarPresupuestoWA() {
   const r = DATA.repairs.find(x => x.id === _presupuestoRepairId);
   if (!r) return;
   const data = collectPresupuestoData();
@@ -708,13 +709,13 @@ function enviarPresupuestoWA() {
 }
 
 // Enviar presupuesto por WhatsApp desde tarjeta (ya guardado)
-function enviarPresupuestoWACard(repairId) {
+window.enviarPresupuestoWACard = function enviarPresupuestoWACard(repairId) {
   const r = DATA.repairs.find(x => x.id === repairId);
   if (!r || !r.presupuesto) return;
   _enviarPresupuestoMsj(r, r.presupuesto);
 }
 
-function _enviarPresupuestoMsj(r, data) {
+function _enviarPresupuestoMsj(r, data) {  // internal helper, no window needed
   const lineas = [
     `Hola *${r.cliente}*! 👋`,
     ``,
@@ -741,7 +742,7 @@ function _enviarPresupuestoMsj(r, data) {
 }
 
 // ─── Modal nueva reparación ───────────────
-function openRepairModal()  {
+window.openRepairModal = function openRepairModal() {
   // Limpiar campos
   document.getElementById('rep-modelo').value = '';
   document.getElementById('rep-cliente').value = '';
@@ -776,9 +777,9 @@ function openRepairModal()  {
 
   document.getElementById('repair-modal').classList.add('active'); 
 }
-function closeRepairModal() { document.getElementById('repair-modal').classList.remove('active'); }
+window.closeRepairModal = function closeRepairModal() { document.getElementById('repair-modal').classList.remove('active'); }
 
-async function saveRepair() {
+window.saveRepair = async function saveRepair() {
   const manualId = document.getElementById('rep-id-manual').value.trim();
   const modelo   = document.getElementById('rep-modelo').value.trim();
   const cliente  = document.getElementById('rep-cliente').value.trim();

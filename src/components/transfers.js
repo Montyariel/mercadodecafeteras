@@ -2,7 +2,7 @@
 // TRASLADOS Y LOGÍSTICA — Mercado de Cafeteras
 // ==========================================
 
-async function renderTransfers() {
+window.renderTransfers = async function () {
   const v = document.getElementById('view-transfers');
 
   if (!v.innerHTML) v.innerHTML = '<div class="loading">Cargando logística...</div>';
@@ -20,7 +20,7 @@ async function renderTransfers() {
   const isWarehouse = currentUser && currentUser.role === 'warehouse';
   const loc = (currentUser && currentUser.location) ? currentUser.location : 'lanus';
 
-  const displayedTransfers = DATA.transfers.filter(t => 
+  const displayedTransfers = DATA.transfers.filter(t =>
     isAdmin || isWarehouse || t.origen === loc || t.destino === loc
   );
 
@@ -63,30 +63,30 @@ async function renderTransfers() {
           </tr>
         </thead>
         <tbody>
-          ${displayedTransfers.length === 0 
-            ? '<tr><td colspan="7" style="text-align:center;padding:32px;color:var(--text-muted);">No hay logística registrada</td></tr>'
-            : displayedTransfers.map(t => `
-            <tr style="background: ${t.estado==='con_error' ? 'rgba(235,87,87,0.05)' : 'transparent'};">
+          ${displayedTransfers.length === 0
+      ? '<tr><td colspan="7" style="text-align:center;padding:32px;color:var(--text-muted);">No hay logística registrada</td></tr>'
+      : displayedTransfers.map(t => `
+            <tr style="background: ${t.estado === 'con_error' ? 'rgba(235,87,87,0.05)' : 'transparent'};">
               <td style="font-weight:700; color:var(--gold-mid);">${String(t.id).replace(/-[0-9]+$/, '')}</td>
               <td style="color:var(--text-muted); font-size:11px;">${t.fecha}</td>
               <td style="font-weight:600; font-size:12px; max-width:200px;">${t.producto}</td>
               <td style="text-align:center; font-weight:700;">${t.qty}</td>
               <td style="font-size:11px;">
-                <span class="${t.origen==='deposito'?'':(t.origen==='lanus'?'branch-lanus':'branch-belgrano')}" style="padding:2px 6px;border-radius:4px;border:1px solid var(--border-subtle);">${t.origen.toUpperCase()}</span>
+                <span class="${t.origen === 'deposito' ? '' : (t.origen === 'lanus' ? 'branch-lanus' : 'branch-belgrano')}" style="padding:2px 6px;border-radius:4px;border:1px solid var(--border-subtle);">${t.origen.toUpperCase()}</span>
                 <span style="color:var(--text-muted);">→</span>
-                <span class="${t.destino==='deposito'?'':(t.destino==='lanus'?'branch-lanus':'branch-belgrano')}" style="padding:2px 6px;border-radius:4px;border:1px solid var(--border-subtle);">${t.destino.toUpperCase()}</span>
+                <span class="${t.destino === 'deposito' ? '' : (t.destino === 'lanus' ? 'branch-lanus' : 'branch-belgrano')}" style="padding:2px 6px;border-radius:4px;border:1px solid var(--border-subtle);">${t.destino.toUpperCase()}</span>
               </td>
               <td>
                 <span class="stock-pill" style="
-                  ${t.estado==='recibido'?'color:var(--green); border-color:var(--green);':''}
-                  ${t.estado==='con_error'?'color:var(--red); border-color:var(--red);':''}
-                  ${t.estado==='enviado'?'color:var(--yellow); border-color:var(--yellow);':''}
-                  ${t.estado==='solicitado'?'color:var(--text-secondary); border-color:var(--text-secondary);':''}
+                  ${t.estado === 'recibido' ? 'color:var(--green); border-color:var(--green);' : ''}
+                  ${t.estado === 'con_error' ? 'color:var(--red); border-color:var(--red);' : ''}
+                  ${t.estado === 'enviado' ? 'color:var(--yellow); border-color:var(--yellow);' : ''}
+                  ${t.estado === 'solicitado' ? 'color:var(--text-secondary); border-color:var(--text-secondary);' : ''}
                 ">
-                  ${t.estado==='recibido'?'✓ Recibido':''}
-                  ${t.estado==='con_error'?'❌ Desvío/Error':''}
-                  ${t.estado==='enviado'?'🚚 En camino':''}
-                  ${t.estado==='solicitado'?'📝 Solicitado':''}
+                  ${t.estado === 'recibido' ? '✓ Recibido' : ''}
+                  ${t.estado === 'con_error' ? '❌ Desvío/Error' : ''}
+                  ${t.estado === 'enviado' ? '🚚 En camino' : ''}
+                  ${t.estado === 'solicitado' ? '📝 Solicitado' : ''}
                 </span>
               </td>
               <td style="display:flex; gap:5px;">
@@ -98,13 +98,10 @@ async function renderTransfers() {
         </tbody>
       </table>
     </div>
-
-    </div>
   `;
 }
-}
 
-function getTransferActions(t) {
+window.getTransferActions = function (t) {
   if (t.estado === 'solicitado' && currentUser.role === 'admin') {
     return `<button class="btn btn-primary" style="font-size:10px;padding:4px 8px;" onclick="approveRequest('${t.id}')">Aprobar y Enviar →</button>`;
   }
@@ -119,27 +116,27 @@ function getTransferActions(t) {
 
 window.transferCart = [];
 
-function renderTransferCartOptions() {
+window.renderTransferCartOptions = function () {
   const origen = document.getElementById('tr-origen').value;
   const prodSelect = document.getElementById('tr-prod');
-  if(!prodSelect) return;
+  if (!prodSelect) return;
   prodSelect.innerHTML = DATA.stock.map(s => {
     const stck = s[origen] || 0;
     return `<option value="${s.id}">${s.nombre} (Stock: ${stck})</option>`;
   }).join('');
 }
 
-function onTransferOrigenChange() {
+window.onTransferOrigenChange = function () {
   window.transferCart = [];
   renderTransferCartOptions();
   renderTransferCartUI();
 }
 
-function addTransferCartItem() {
+window.addTransferCartItem = function () {
   const pId = parseInt(document.getElementById('tr-prod').value);
   const qty = parseInt(document.getElementById('tr-qty').value);
   const origen = document.getElementById('tr-origen').value;
-  
+
   if (isNaN(qty) || qty <= 0) return;
   const prod = DATA.stock.find(s => s.id === pId);
   if (!prod) return;
@@ -162,15 +159,15 @@ function addTransferCartItem() {
   renderTransferCartUI();
 }
 
-function removeTransferCartItem(pId) {
+window.removeTransferCartItem = function (pId) {
   window.transferCart = window.transferCart.filter(item => item.id !== pId);
   renderTransferCartUI();
 }
 
-function renderTransferCartUI() {
+window.renderTransferCartUI = function () {
   const list = document.getElementById('transfer-cart-list');
-  if(!list) return;
-  
+  if (!list) return;
+
   if (window.transferCart.length === 0) {
     list.innerHTML = '<div style="color:var(--text-muted); text-align:center; margin-top:20px;">No agregaste productos al envío.</div>';
     return;
@@ -185,22 +182,22 @@ function renderTransferCartUI() {
 }
 
 /* Modal Triggers */
-function openTransferModal(prodId = null) {
+window.openTransferModal = function (prodId = null) {
   window.transferCart = [];
   document.getElementById('transfer-modal').classList.add('active');
   renderTransferCartOptions();
   renderTransferCartUI();
   if (prodId) document.getElementById('tr-prod').value = prodId;
 }
-function closeTransferModal() {
+window.closeTransferModal = function () {
   document.getElementById('transfer-modal').classList.remove('active');
 }
-function openRequestModal(prodId = null) {
+window.openRequestModal = function (prodId = null) {
   const m = document.getElementById('request-modal');
   if (!m) return;
 
   m.classList.add('active');
-  
+
   // Poblar select de productos si está vacío o para asegurar datos frescos
   const prodSelect = document.getElementById('req-prod');
   if (prodSelect) {
@@ -218,12 +215,12 @@ function openRequestModal(prodId = null) {
     onRequestProdChange();
   }
 }
-function closeRequestModal() {
+window.closeRequestModal = function () {
   const m = document.getElementById('request-modal');
   if (m) m.classList.remove('active');
 }
 
-function onRequestProdChange() {
+window.onRequestProdChange = function () {
   const pId = parseInt(document.getElementById('req-prod').value);
   const prod = DATA.stock.find(s => s.id === pId);
   const el = document.getElementById('req-modal-stock-info');
@@ -233,11 +230,11 @@ function onRequestProdChange() {
 }
 
 /* Logic */
-function generateTransferID() {
+window.generateTransferID = function () {
   return 'REM-' + Math.floor(1000 + Math.random() * 9000);
 }
 
-async function createRequest() {
+window.createRequest = async function () {
   const pId = parseInt(document.getElementById('req-prod').value);
   const qty = parseInt(document.getElementById('req-qty').value);
   const destino = currentUser.location;
@@ -245,13 +242,13 @@ async function createRequest() {
   if (qty <= 0) return;
   const prod = DATA.stock.find(s => s.id === pId);
   const today = new Date();
-  
+
   const newReq = {
     id: generateTransferID(),
-    origen: 'deposito', destino, 
-    producto: prod.nombre, stock_id: pId, 
-    qty, 
-    fecha: `${today.getDate().toString().padStart(2,'0')}/${(today.getMonth()+1).toString().padStart(2,'0')} ${today.getHours()}:${today.getMinutes()}hs`, 
+    origen: 'deposito', destino,
+    producto: prod.nombre, stock_id: pId,
+    qty,
+    fecha: `${today.getDate().toString().padStart(2, '0')}/${(today.getMonth() + 1).toString().padStart(2, '0')} ${today.getHours()}:${today.getMinutes()}hs`,
     estado: 'solicitado'
   };
 
@@ -269,10 +266,10 @@ async function createRequest() {
   showToast('Solicitud enviada al Depósito', 'success');
 }
 
-async function approveRequest(trId) {
+window.approveRequest = async function (trId) {
   const tr = DATA.transfers.find(t => t.id === trId);
   const prod = DATA.stock.find(s => s.id === parseInt(tr.stock_id));
-  
+
   if (prod[tr.origen] < tr.qty) {
     showToast(`⚠️ Stock insuficiente en ${tr.origen.toUpperCase()} (Hay ${prod[tr.origen]}). No se puede enviar.`, 'error');
     return;
@@ -296,7 +293,7 @@ async function approveRequest(trId) {
   printRemito(trId); // Automáticamente sugiere imprimir el remito para dárselo al flete
 }
 
-async function createTransfer() {
+window.createTransfer = async function () {
   const origen = document.getElementById('tr-origen').value;
   const destino = document.getElementById('tr-destino').value;
 
@@ -320,23 +317,23 @@ async function createTransfer() {
   }
 
   const today = new Date();
-  const fecha = `${today.getDate().toString().padStart(2,'0')}/${(today.getMonth()+1).toString().padStart(2,'0')} ${today.getHours()}:${today.getMinutes()}hs`;
-  
+  const fecha = `${today.getDate().toString().padStart(2, '0')}/${(today.getMonth() + 1).toString().padStart(2, '0')} ${today.getHours()}:${today.getMinutes()}hs`;
+
   const baseTrId = generateTransferID();
   const createdTransfersIds = [];
   const pUpdates = [];
 
   for (let i = 0; i < window.transferCart.length; i++) {
     const item = window.transferCart[i];
-    const trId = window.transferCart.length > 1 ? `${baseTrId}-${i+1}` : baseTrId;
+    const trId = window.transferCart.length > 1 ? `${baseTrId}-${i + 1}` : baseTrId;
     createdTransfersIds.push(trId);
-    
+
     const prod = DATA.stock.find(s => s.id === item.id);
     prod[origen] -= item.qty; // Descuento optimista
-    
+
     const newTr = {
       id: trId,
-      origen, destino, producto: prod.nombre, stock_id: item.id, qty: item.qty, 
+      origen, destino, producto: prod.nombre, stock_id: item.id, qty: item.qty,
       fecha: fecha,
       estado: 'enviado'
     };
@@ -353,20 +350,20 @@ async function createTransfer() {
       await Promise.all(pUpdates);
     }
   } catch (err) {
-      console.warn('Error en Supabase, aplicando ROLLBACK', err);
-      showToast('⚠️ Falla de conectividad. Revirtiendo transacción.', 'error');
-      
-      // Rollback: Revertir stock local descontado
-      for (let i = 0; i < window.transferCart.length; i++) {
-        const item = window.transferCart[i];
-        const prod = DATA.stock.find(s => s.id === item.id);
-        if (prod) prod[origen] += item.qty; 
-      }
-      
-      // Remover de DATA.transfers los registros creados temporalmente
-      DATA.transfers = DATA.transfers.filter(t => !createdTransfersIds.includes(t.id));
-      renderTransfers();
-      return; 
+    console.warn('Error en Supabase, aplicando ROLLBACK', err);
+    showToast('⚠️ Falla de conectividad. Revirtiendo transacción.', 'error');
+
+    // Rollback: Revertir stock local descontado
+    for (let i = 0; i < window.transferCart.length; i++) {
+      const item = window.transferCart[i];
+      const prod = DATA.stock.find(s => s.id === item.id);
+      if (prod) prod[origen] += item.qty;
+    }
+
+    // Remover de DATA.transfers los registros creados temporalmente
+    DATA.transfers = DATA.transfers.filter(t => !createdTransfersIds.includes(t.id));
+    renderTransfers();
+    return;
   }
 
   closeTransferModal();
@@ -375,7 +372,7 @@ async function createTransfer() {
   printMultiRemito(createdTransfersIds, baseTrId, origen, destino, fecha);
 }
 
-function printMultiRemito(ids, baseTrId, origen, destino, fecha) {
+window.printMultiRemito = function (ids, baseTrId, origen, destino, fecha) {
   const trs = ids.map(id => DATA.transfers.find(t => t.id === id)).filter(Boolean);
   if (trs.length === 0) return;
 
@@ -455,7 +452,7 @@ function printMultiRemito(ids, baseTrId, origen, destino, fecha) {
   }, 250);
 }
 
-async function receiveTransfer(trId) {
+window.receiveTransfer = async function (trId) {
   if (!confirm('¿Confirmás que recibiste EXACTAMENTE la cantidad que dice el remito?')) return;
 
   const tr = DATA.transfers.find(t => t.id === trId);
@@ -465,25 +462,25 @@ async function receiveTransfer(trId) {
   if (!tr.stock_id || String(tr.stock_id) === '0' || String(tr.id).startsWith('REM-REP-')) {
     const isRep = String(tr.id).startsWith('REM-REP-');
     if (isRep) {
-       const repId = tr.id.replace('REM-REP-', '');
-       const rep = DATA.repairs.find(r => r.id === repId);
-       if (rep) {
-         rep.sucursal = tr.destino;
-         try {
-           if (SUPABASE_KEY !== 'TU_ANON_KEY_AQUI') await db.repairs.update(repId, { sucursal: tr.destino });
-         } catch(e) {}
-       }
+      const repId = tr.id.replace('REM-REP-', '');
+      const rep = DATA.repairs.find(r => r.id === repId);
+      if (rep) {
+        rep.sucursal = tr.destino;
+        try {
+          if (SUPABASE_KEY !== 'TU_ANON_KEY_AQUI') await db.repairs.update(repId, { sucursal: tr.destino });
+        } catch (e) { }
+      }
     }
-    
+
     tr.estado = 'recibido';
     try {
       if (SUPABASE_KEY !== 'TU_ANON_KEY_AQUI') await db.transfers.update(trId, { estado: 'recibido' });
-    } catch(e) {}
-    
+    } catch (e) { }
+
     renderTransfers();
     // Re-render repairs view if open
-    if(typeof renderRepairs === 'function' && document.getElementById('view-repairs') && document.getElementById('view-repairs').innerHTML !== '') {
-       renderKanban();
+    if (typeof renderRepairs === 'function' && document.getElementById('view-repairs') && document.getElementById('view-repairs').innerHTML !== '') {
+      renderKanban();
     }
     showToast(`✅ Recepción OK. Reparación ingresada al taller.`, 'success');
     return;
@@ -509,7 +506,7 @@ async function receiveTransfer(trId) {
   }
 }
 
-async function reportTransferError(trId) {
+window.reportTransferError = async function (trId) {
   const reason = prompt('Por favor, detallá cuál fue el error (Ejs: "Faltaron 2 unidades", "Caja Rota", "Producto Equivocado"):');
   if (!reason) return; // cancelled
 
@@ -517,7 +514,7 @@ async function reportTransferError(trId) {
   if (tr) {
     tr.estado = 'con_error';
     // El stock NO ingresó. La admin deberá ajustar el DB manualmente luego.
-    
+
     try {
       if (SUPABASE_KEY !== 'TU_ANON_KEY_AQUI') {
         await db.transfers.update(trId, { estado: 'con_error' });
@@ -529,7 +526,7 @@ async function reportTransferError(trId) {
   }
 }
 
-function printRemito(trId) {
+window.printRemito = function (trId) {
   const tr = DATA.transfers.find(t => t.id === trId);
   if (!tr) return;
 
