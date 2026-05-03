@@ -52,7 +52,7 @@ window.renderRepairs = async function renderRepairs() {
         <button class="btn ${repairsFilter==='progreso' ?'btn-primary':'btn-ghost'}" onclick="filterRepairs('progreso')">🟡 En proceso</button>
         <button class="btn ${repairsFilter==='listo'    ?'btn-primary':'btn-ghost'}" onclick="filterRepairs('listo')">🟢 Listas</button>
       </div>
-      <button class="btn btn-primary" onclick="openRepairModal()">+ Nueva Reparación</button>
+      ${(window.currentUser && window.currentUser.role === 'tech') ? '' : '<button class="btn btn-primary" onclick="openRepairModal()">+ Nueva Reparación</button>'}
     </div>
 
     <div class="kanban-board" id="kanban-board"></div>
@@ -743,6 +743,7 @@ function _enviarPresupuestoMsj(r, data) {  // internal helper, no window needed
 
 // ─── Modal nueva reparación ───────────────
 window.openRepairModal = function openRepairModal() {
+  if (window.currentUser && window.currentUser.role === 'tech') return;
   // Limpiar campos
   document.getElementById('rep-modelo').value = '';
   document.getElementById('rep-cliente').value = '';
