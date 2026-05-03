@@ -140,7 +140,7 @@ window.init = function() {
     }
 
     if (navCierre) {
-      if (role === 'admin' || role === 'warehouse') {
+      if (role === 'admin' || role === 'warehouse' || role === 'tech') {
         navCierre.setAttribute('style', 'display: none !important');
       } else {
         navCierre.style.display = 'flex';
@@ -154,12 +154,10 @@ window.init = function() {
     const navStock     = document.getElementById('nav-stock');
     const navTransfers = document.getElementById('nav-transfers');
     const navHistory   = document.getElementById('nav-history');
-    const navCierre    = document.getElementById('nav-cierre');
 
     if (role === 'warehouse') {
       if (navSales) navSales.style.display = 'none';
       if (navRepairs) navRepairs.style.display = 'none';
-      if (navCierre) navCierre.style.display = 'none';
       navigate('stock');
     } else if (role === 'tech') {
       if (navDashboard) navDashboard.style.display = 'none';
@@ -167,7 +165,6 @@ window.init = function() {
       if (navStock) navStock.style.display = 'none';
       if (navTransfers) navTransfers.style.display = 'none';
       if (navHistory) navHistory.style.display = 'none';
-      if (navCierre) navCierre.style.display = 'none';
       navigate('repairs');
     } else {
       navigate('dashboard');
