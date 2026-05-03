@@ -14,6 +14,7 @@ const DATA = {
     { id: 2, user: 'vendedor_lanus', pass: '1122', name: 'Vanesa', role: 'vendor', location: 'lanus' },
     { id: 3, user: 'vendedor_belgrano', pass: '1122', name: 'Marcos', role: 'vendor', location: 'belgrano' },
     { id: 4, user: 'jefe_deposito', pass: '1122', name: 'Ricardo', role: 'warehouse', location: 'deposito' },
+    { id: 5, user: 'tecnico_taller', pass: '1122', name: 'Técnico Taller', role: 'tech', location: 'lanus' },
   ],
 
   kpis: {

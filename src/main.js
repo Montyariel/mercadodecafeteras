@@ -15,6 +15,10 @@ window.navigate = function(view) {
     showToast('⚠️ No tenés permiso para acceder a esta vista', 'error');
     return;
   }
+  if (window.currentUser && window.currentUser.role === 'tech' && view !== 'repairs') {
+    showToast('⚠️ Modo Técnico: Solo podés ver las Reparaciones', 'error');
+    return;
+  }
 
   window.currentView = view;
 
@@ -143,20 +147,32 @@ window.init = function() {
       }
     }
 
-    // Ocultar botones para Depósito
-    const navSales   = document.getElementById('nav-sales');
-    const navRepairs = document.getElementById('nav-repairs');
+    // Ocultar botones para Depósito y Técnicos
+    const navDashboard = document.getElementById('nav-dashboard');
+    const navSales     = document.getElementById('nav-sales');
+    const navRepairs   = document.getElementById('nav-repairs');
+    const navStock     = document.getElementById('nav-stock');
+    const navTransfers = document.getElementById('nav-transfers');
+    const navHistory   = document.getElementById('nav-history');
+
     if (role === 'warehouse') {
       if (navSales) navSales.style.display = 'none';
       if (navRepairs) navRepairs.style.display = 'none';
       navigate('stock');
+    } else if (role === 'tech') {
+      if (navDashboard) navDashboard.style.display = 'none';
+      if (navSales) navSales.style.display = 'none';
+      if (navStock) navStock.style.display = 'none';
+      if (navTransfers) navTransfers.style.display = 'none';
+      if (navHistory) navHistory.style.display = 'none';
+      navigate('repairs');
     } else {
       navigate('dashboard');
     }
 
-    // REGLA: Vendedores y Depósito no pueden cambiar sucursal en sidebar
+    // REGLA: Vendedores, Depósito y Técnicos no pueden cambiar sucursal en sidebar
     // El Admin sí puede para filtrar datos específicos si lo desea
-    if (role === 'vendor' || role === 'warehouse') {
+    if (role === 'vendor' || role === 'warehouse' || role === 'tech') {
       const branchContainer = document.querySelector('.sidebar-branches');
       if (branchContainer) {
         let locationName = window.currentUser.location === 'lanus' ? '☕ Lanús' : (window.currentUser.location === 'belgrano' ? '🏢 Belgrano' : '📦 Depósito');
@@ -172,8 +188,8 @@ window.init = function() {
     const roleLabel = document.getElementById('user-role-display');
     const avatarTag = document.getElementById('user-avatar-tag');
 
-    const rolesMap = { admin: 'Administrador', vendor: 'Vendedor/a', warehouse: 'Encargado Depósito' };
-    const initialsMap = { admin: 'AD', vendor: 'VE', warehouse: 'DE' };
+    const rolesMap = { admin: 'Administrador', vendor: 'Vendedor/a', warehouse: 'Encargado Depósito', tech: 'Técnico de Taller' };
+    const initialsMap = { admin: 'AD', vendor: 'VE', warehouse: 'DE', tech: 'TE' };
 
     if (userLabel) userLabel.textContent = window.currentUser.name || 'Usuario';
     if (roleLabel) roleLabel.textContent = rolesMap[role] || 'Personal';

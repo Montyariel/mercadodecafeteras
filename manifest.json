@@ -1,0 +1,17 @@
+{
+  "name": "Mercado de Cafeteras",
+  "short_name": "M. Cafeteras",
+  "description": "Sistema de gestión integral para Mercado de Cafeteras.",
+  "start_url": "./index.html",
+  "display": "standalone",
+  "background_color": "#1a0f0a",
+  "theme_color": "#c9973a",
+  "icons": [
+    {
+      "src": "data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' fill='%231a0f0a'/%3E%3Ctext x='50' y='65' font-size='50' text-anchor='middle' fill='%23c9973a'%3E%E2%98%95%3C/text%3E%3C/svg%3E",
+      "sizes": "192x192 512x512",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}
