@@ -273,7 +273,7 @@ window.confirmApertura = async function() {
     }
     
     if (window.logUserAction) {
-      window.logUserAction('Apertura de Caja', \`Monto Inicial: \${monto}\`);
+      window.logUserAction('Apertura de Caja', `Monto Inicial: ${monto}`);
     }
 
     const m = document.getElementById('apertura-modal');
