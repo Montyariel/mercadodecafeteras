@@ -61,7 +61,7 @@ async function renderSales() {
     <div class="card" style="padding:0;overflow:hidden;">
       <div style="display:flex;align-items:center;justify-content:space-between;padding:18px 24px;border-bottom:1px solid var(--border-subtle);">
         <span class="section-title">Últimas Ventas</span>
-        <div>
+        <div style="${isAdmin ? 'display:none;' : ''}">
           <button class="btn btn-primary" style="background:var(--red); border-color:var(--red); margin-right:10px;" onclick="openExpenseModal()">💸 Registrar Egreso</button>
           <button class="btn btn-primary" onclick="openSaleModal()">+ Registrar Venta Múltiple</button>
         </div>
