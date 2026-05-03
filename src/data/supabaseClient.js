@@ -81,6 +81,12 @@ window.db = {
       const { data, error } = await window.supabaseDB.from('stock').upsert([item]);
       if (error) throw error;
       return data;
+    },
+    async insert(item) {
+      if (!window.supabaseDB) return null;
+      const { data, error } = await window.supabaseDB.from('stock').insert([item]).select();
+      if (error) throw error;
+      return data;
     }
   },
 

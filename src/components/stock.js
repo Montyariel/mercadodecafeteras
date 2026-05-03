@@ -59,6 +59,7 @@ window.renderStock = async function() {
         ` : ''}
       </div>
       <div style="display:flex; gap:10px;">
+        ${isAdminOrWarehouse ? '<button class="btn btn-primary" style="background:var(--blue);border-color:var(--blue);" onclick="openNewProductModal()">+ Nuevo Producto</button>' : ''}
         ${isAdminOrWarehouse ? '<button class="btn btn-primary" onclick="openStockModal()">+ Ajustar Stock</button>' : ''}
       </div>
     </div>
@@ -154,6 +155,59 @@ window.renderStock = async function() {
         <div class="form-actions">
           <button class="btn btn-ghost" onclick="closeStockModal()">Cancelar</button>
           <button class="btn btn-primary" onclick="applyStockAdjust()">✅ Aplicar</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Modal Nuevo Producto -->
+    <div class="modal-overlay" id="new-product-modal">
+      <div class="modal-box" style="width: 500px;">
+        <div class="modal-title">📦 Agregar Nuevo Producto</div>
+        <div class="form-group">
+          <label class="form-label">Nombre del Producto</label>
+          <input class="form-input" id="new-prod-name" type="text" placeholder="Ej: Cafetera Italiana" />
+        </div>
+        <div class="form-group">
+          <label class="form-label">Categoría</label>
+          <select class="form-input" id="new-prod-cat">
+            <option value="Máquinas">Máquinas</option>
+            <option value="Insumos">Insumos</option>
+            <option value="Repuestos">Repuestos</option>
+            <option value="Accesorios">Accesorios</option>
+            <option value="Otros">Otros</option>
+          </select>
+        </div>
+        <div class="grid-2">
+          <div class="form-group">
+            <label class="form-label">Stock Inicial (Depósito)</label>
+            <input class="form-input" id="new-prod-deposito" type="number" min="0" value="0" />
+          </div>
+          <div class="form-group">
+            <label class="form-label">Stock Mínimo (Alerta)</label>
+            <input class="form-input" id="new-prod-min" type="number" min="1" value="5" />
+          </div>
+        </div>
+        
+        <div style="padding:15px; margin-top:15px; background:rgba(0,0,0,0.2); border:1px solid var(--border-subtle); border-radius:8px;">
+          <div style="font-size:12px; color:var(--text-muted); margin-bottom:10px; font-weight:700;">PRECIOS</div>
+          <div class="grid-2">
+            <div class="form-group">
+              <label class="form-label">Costo ($)</label>
+              <input class="form-input" id="new-prod-cost" type="number" oninput="calculateNewSuggestedPrice()" value="0" />
+            </div>
+            <div class="form-group">
+              <label class="form-label">Margen (%)</label>
+              <input class="form-input" id="new-prod-margin" type="number" oninput="calculateNewSuggestedPrice()" value="0" />
+            </div>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Precio Final Venta ($)</label>
+            <input class="form-input" id="new-prod-price" type="number" value="0" style="color:var(--gold-bright); font-weight:700;" />
+          </div>
+        </div>
+        <div class="form-actions">
+          <button class="btn btn-ghost" onclick="closeNewProductModal()">Cancelar</button>
+          <button class="btn btn-primary" onclick="createNewProduct()">✅ Guardar Producto</button>
         </div>
       </div>
     </div>
@@ -337,4 +391,75 @@ window.applyStockAdjust = async function() {
   window.closeStockModal();
   window.renderStock();
   showToast('✅ Stock actualizado', 'success');
+};
+
+window.openNewProductModal = function() {
+  const m = document.getElementById('new-product-modal');
+  if (m) m.classList.add('active');
+};
+
+window.closeNewProductModal = function() {
+  const m = document.getElementById('new-product-modal');
+  if (m) m.classList.remove('active');
+};
+
+window.calculateNewSuggestedPrice = function() {
+  const cost = parseFloat(document.getElementById('new-prod-cost').value) || 0;
+  const margin = parseFloat(document.getElementById('new-prod-margin').value) || 0;
+  const suggestedPrice = cost * (1 + (margin / 100));
+  document.getElementById('new-prod-price').value = Math.round(suggestedPrice);
+};
+
+window.createNewProduct = async function() {
+  const name = document.getElementById('new-prod-name').value.trim();
+  const cat = document.getElementById('new-prod-cat').value;
+  const deposito = parseInt(document.getElementById('new-prod-deposito').value) || 0;
+  const min = parseInt(document.getElementById('new-prod-min').value) || 0;
+  const cost = parseFloat(document.getElementById('new-prod-cost').value) || 0;
+  const margin = parseFloat(document.getElementById('new-prod-margin').value) || 0;
+  const price = parseFloat(document.getElementById('new-prod-price').value) || 0;
+
+  if (!name) {
+    showToast('⚠️ Completa el nombre del producto', 'warning');
+    return;
+  }
+
+  const newProduct = {
+    nombre: name,
+    categoria: cat,
+    lanus: 0,
+    belgrano: 0,
+    deposito: deposito,
+    min: min,
+    costo_unitario: cost,
+    margen_ganancia: margin,
+    precio: price,
+    imagen: 'https://placehold.co/40x40?text=📦',
+    ubicacion: ''
+  };
+
+  try {
+    const btn = document.querySelector('#new-product-modal .btn-primary');
+    if (btn) btn.disabled = true;
+
+    if (typeof SUPABASE_KEY !== 'undefined' && SUPABASE_KEY !== 'TU_ANON_KEY_AQUI' && typeof db !== 'undefined') {
+      const response = await db.stock.insert(newProduct);
+      if (response && response.length > 0) {
+        newProduct.id = response[0].id;
+      } else {
+        newProduct.id = Date.now(); // Fallback for local
+      }
+    } else {
+      newProduct.id = Date.now();
+    }
+  } catch (err) {
+    console.error('Error insertando nuevo producto:', err);
+    showToast('⚠️ Error al conectar con servidor, se guardó localmente', 'warning');
+    newProduct.id = Date.now();
+  }
+
+  DATA.stock.push(newProduct);
+  window.closeNewProductModal();
+  window.renderStock();
+  showToast('✅ Producto agregado correctamente', 'success');
 };
