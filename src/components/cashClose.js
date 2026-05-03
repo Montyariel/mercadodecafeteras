@@ -390,6 +390,10 @@ function openCierre(branch = 'ambas') {
               onclick="enviarEmail(window._cierreData, window._cierre_branchLabel)">
               📧 Enviar por email
             </button>
+            <button class="btn btn-primary" style="background:#d9434e; border-color:#d9434e;"
+              onclick="confirmCashShiftClose(window._cierreData)">
+              🔒 CERRAR TURNO DIARIO
+            </button>
           </div>
         </div>
       </div>
@@ -418,4 +422,36 @@ function closeCierre() {
     setTimeout(() => overlay.remove(), 300);
   }
 }
+
+window.confirmCashShiftClose = async function(d) {
+  if (!confirm("⚠️ ¿Estás seguro que querés CERRAR el turno? No podrás registrar más ventas o reparar si lo cerrás.")) return;
+  
+  if (window.activeShiftData && SUPABASE_KEY !== 'TU_ANON_KEY_AQUI') {
+    try {
+      await db.cash_shifts.closeShift(window.activeShiftData.id, {
+        estado: 'cerrada',
+        cerrado_por: window.currentUser.user || window.currentUser.name,
+        monto_final: d.efectivoFinal,
+        closed_at: new Date().toISOString()
+      });
+    } catch(e) {
+      console.warn("Falla de red al cerrar caja", e);
+    }
+  }
+
+  if (window.logUserAction) {
+    window.logUserAction('Cierre de Turno', `Efectivo Final: ${d.efectivoFinal} | Recaudación Gral: ${d.totalGeneral}`);
+  }
+
+  window.activeShiftData = null;
+  if (window.updateVendorShiftIndicator) window.updateVendorShiftIndicator(false);
+
+  closeCierre();
+  showToast('🔒 Turno finalizado y caja cerrada', 'success');
+  
+  // Opcional: Redirigir al login o volver a forzar apertura
+  if (window.checkCashShift && window.currentUser && window.currentUser.role === 'vendor') {
+    window.checkCashShift();
+  }
+};
 

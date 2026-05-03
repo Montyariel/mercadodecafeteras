@@ -139,6 +139,68 @@ window.db = {
       if (error) throw error;
       return data;
     }
+  },
+
+  audit_logs: {
+    async getAll() {
+      if (!window.supabaseDB) return null;
+      const { data, error } = await window.supabaseDB.from('audit_logs').select('*').order('created_at', { ascending: false });
+      if (error) throw error;
+      return data;
+    },
+    async insert(log) {
+      if (!window.supabaseDB) return null;
+      const { data, error } = await window.supabaseDB.from('audit_logs').insert([log]);
+      if (error) throw error;
+      return data;
+    }
+  },
+
+  cash_shifts: {
+    async getActive(sucursal) {
+      if (!window.supabaseDB) return null;
+      const { data, error } = await window.supabaseDB.from('cash_shifts')
+        .select('*')
+        .eq('sucursal', sucursal)
+        .eq('estado', 'abierta')
+        .order('opened_at', { ascending: false })
+        .limit(1);
+      if (error) throw error;
+      return data;
+    },
+    async openShift(shiftData) {
+      if (!window.supabaseDB) return null;
+      const { data, error } = await window.supabaseDB.from('cash_shifts').insert([shiftData]);
+      if (error) throw error;
+      return data;
+    },
+    async closeShift(id, updates) {
+      if (!window.supabaseDB) return null;
+      const { data, error } = await window.supabaseDB.from('cash_shifts').update(updates).eq('id', id);
+      if (error) throw error;
+      return data;
+    }
+  }
+};
+
+window.logUserAction = async function(accion, detalles) {
+  if (!window.currentUser) return;
+  const log = {
+    usuario: window.currentUser.user || window.currentUser.name || 'Desconocido',
+    rol: window.currentUser.role || 'vendor',
+    sucursal: window.currentUser.location || 'desconocida',
+    accion: accion,
+    detalles: typeof detalles === 'string' ? detalles : JSON.stringify(detalles)
+  };
+  try {
+    if (typeof SUPABASE_KEY !== 'undefined' && SUPABASE_KEY !== 'TU_ANON_KEY_AQUI') {
+      await db.audit_logs.insert(log);
+    } else {
+      if (!window.DATA.audit) window.DATA.audit = [];
+      window.DATA.audit.push({ ...log, created_at: new Date().toISOString() });
+    }
+  } catch (err) {
+    console.error('No se pudo registrar la auditoría:', err);
   }
 };
 

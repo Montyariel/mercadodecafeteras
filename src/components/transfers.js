@@ -369,6 +369,12 @@ window.createTransfer = async function () {
   closeTransferModal();
   renderTransfers();
   showToast('🚚 Envío múltiple registrado con éxito', 'success');
+
+  if (window.logUserAction) {
+    const nombresProds = window.transferCart.map(c => `${c.qty}x ${c.nombre}`).join(', ');
+    window.logUserAction('Traslado Creado', `Desde: ${origen.toUpperCase()} | Hacia: ${destino.toUpperCase()} | Items: ${nombresProds}`);
+  }
+
   printMultiRemito(createdTransfersIds, baseTrId, origen, destino, fecha);
 }
 
@@ -482,6 +488,11 @@ window.receiveTransfer = async function (trId) {
     if (typeof renderRepairs === 'function' && document.getElementById('view-repairs') && document.getElementById('view-repairs').innerHTML !== '') {
       renderKanban();
     }
+
+    if (window.logUserAction) {
+      window.logUserAction('Recepcion Traslado Reparacion', `ID: ${tr.id} | Sucursal: ${tr.destino}`);
+    }
+
     showToast(`✅ Recepción OK. Reparación ingresada al taller.`, 'success');
     return;
   }
@@ -500,6 +511,10 @@ window.receiveTransfer = async function (trId) {
         ]);
       }
     } catch (err) { }
+
+    if (window.logUserAction) {
+      window.logUserAction('Recepcion Traslado Producto', `ID: ${tr.id} | Prod: ${prod.nombre} | Qty: ${tr.qty} | Sucursal: ${tr.destino}`);
+    }
 
     renderTransfers();
     showToast(`✅ Recepción perfecta. Stock sumado a ${tr.destino.toUpperCase()}`, 'success');
@@ -520,6 +535,10 @@ window.reportTransferError = async function (trId) {
         await db.transfers.update(trId, { estado: 'con_error' });
       }
     } catch (err) { }
+
+    if (window.logUserAction) {
+      window.logUserAction('Error en Traslado', `ID: ${tr.id} | Motivo: ${reason}`);
+    }
 
     renderTransfers();
     showToast('🚨 Desvío reportado a la administración.', 'warning');

@@ -432,6 +432,11 @@ async function saveSale() {
   }
 
   DATA.sales.unshift({ fecha: fechaStr, ...newSale });
+  
+  if (window.logUserAction) {
+    window.logUserAction('Venta Registrada', `Productos: ${productosDetalle} | Total: ${cartTotal} | Pagos: ${pagosDetalle}`);
+  }
+
   closeSaleModal();
   renderSales();
   showToast(`✅ Venta exitosa. Total cobrado: ${formatCurrency(paymentsTotal)}`, 'success');
@@ -567,6 +572,10 @@ async function submitExpense() {
       DATA.withdrawals.push(withdrawalData);
     }
     
+    if (window.logUserAction) {
+      window.logUserAction('Retiro de Efectivo', `Monto: ${amount} | Categ: ${category} | Motivo: ${reason}`);
+    }
+
     // Cerrar el modal inmediatamente para quitar el fondo difuminado
     document.getElementById('expense-modal').remove();
     

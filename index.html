@@ -56,6 +56,10 @@
           <span class="nav-icon">📜</span>
           <span class="nav-label">Historial</span>
         </button>
+        <button class="nav-btn" id="nav-audit" onclick="navigate('audit')" style="display:none;">
+          <span class="nav-icon">🛡️</span>
+          <span class="nav-label">Auditoría</span>
+        </button>
         <button class="nav-btn" id="nav-cierre" onclick="openCierre(currentUser && currentUser.location)">
           <span class="nav-icon">🔒</span>
           <span class="nav-label">Cierre de Caja</span>
@@ -115,6 +119,7 @@
       <div id="view-sales" class="view"></div>
       <div id="view-history" class="view"></div>
       <div id="view-transfers" class="view"></div>
+      <div id="view-audit" class="view"></div>
     </main>
   </div>
 
@@ -205,6 +210,7 @@
   <script src="src/components/cashClose.js"></script>
   <script src="src/components/admissionReceipt.js"></script>
   <script src="src/components/history.js"></script>
+  <script src="src/components/audit.js"></script>
   <script src="src/main.js"></script>
 </body>
 </html>

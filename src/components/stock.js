@@ -388,6 +388,10 @@ window.applyStockAdjust = async function() {
     console.error('Error Supabase Stock:', err);
   }
 
+  if (window.logUserAction) {
+    window.logUserAction('Ajuste de Stock', `Producto ID: ${id} | Sucursal: ${suc} | Operación: ${op} | Cantidad: ${qty}`);
+  }
+
   window.closeStockModal();
   window.renderStock();
   showToast('✅ Stock actualizado', 'success');
@@ -456,6 +460,10 @@ window.createNewProduct = async function() {
     console.error('Error insertando nuevo producto:', err);
     showToast('⚠️ Error al conectar con servidor, se guardó localmente', 'warning');
     newProduct.id = Date.now();
+  }
+
+  if (window.logUserAction) {
+    window.logUserAction('Nuevo Producto Creado', `Nombre: ${name} | Categ: ${cat} | Costo: ${cost} | Margen: ${margin} | Precio: ${price}`);
   }
 
   DATA.stock.push(newProduct);

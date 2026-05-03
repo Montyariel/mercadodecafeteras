@@ -35,6 +35,7 @@ window.navigate = function(view) {
     sales:     ['Ventas',        'Registro y análisis de ventas'],
     history:   ['Historial',     'Seguimiento de reparaciones'],
     transfers: ['Traslados',     'Movimientos de stock'],
+    audit:     ['Auditoría',     'Registro de seguridad inmutable'],
   };
   const tInfo = titles[view] || ['Mercado de Cafeteras', 'Bienvenido'];
   const titleEl = document.getElementById('page-title');
@@ -126,6 +127,14 @@ window.init = function() {
     
     // REGLA CRÍTICA: Solo Vendedores ven Cierre de Caja
     const navCierre = document.getElementById('nav-cierre');
+    const navAudit = document.getElementById('nav-audit');
+
+    if (role === 'admin') {
+      if (navAudit) navAudit.style.display = 'flex';
+    } else {
+      if (navAudit) navAudit.style.display = 'none';
+    }
+
     if (navCierre) {
       if (role === 'admin' || role === 'warehouse') {
         navCierre.setAttribute('style', 'display: none !important');
@@ -175,6 +184,12 @@ window.init = function() {
     
     if (typeof testSupabaseConnection === 'function') testSupabaseConnection();
 
+    if (role === 'vendor') {
+      checkCashShift();
+    } else if (role === 'admin') {
+      window.renderAdminShiftIndicators();
+    }
+
   } catch (err) {
     console.error('Error Init:', err);
   }
@@ -194,6 +209,132 @@ window.getRepairBranch = function(r) {
   
   // 3. Respaldo por ubicación física
   return r.sucursal || 'lanus';
+};
+
+window.checkCashShift = async function() {
+  if (!window.currentUser || window.currentUser.role !== 'vendor') return;
+  const loc = window.currentUser.location;
+
+  try {
+    if (SUPABASE_KEY !== 'TU_ANON_KEY_AQUI' && typeof db !== 'undefined') {
+      const activeShift = await db.cash_shifts.getActive(loc);
+      if (activeShift && activeShift.length > 0) {
+        window.activeShiftData = activeShift[0];
+        window.updateVendorShiftIndicator(true);
+        return; // Caja está abierta
+      }
+    }
+  } catch (e) {
+    console.warn("No se pudo verificar el turno, saltando control de caja.", e);
+    return;
+  }
+
+  // Caja cerrada, obligar a abrir
+  window.updateVendorShiftIndicator(false);
+  const html = `
+    <div class="modal-overlay active" id="apertura-modal" style="z-index:9999; background:rgba(0,0,0,0.85); backdrop-filter:blur(5px);">
+      <div class="modal-box" style="text-align:center;">
+        <div style="font-size:40px; margin-bottom:10px;">🔒</div>
+        <div class="modal-title">Caja Cerrada</div>
+        <p style="color:var(--text-muted); font-size:13px; margin-bottom:20px;">Antes de operar en <b>${loc.toUpperCase()}</b>, debés abrir la caja indicando el monto de cambio inicial.</p>
+        
+        <div class="form-group" style="text-align:left;">
+          <label class="form-label">Efectivo Inicial en Caja ($)</label>
+          <input type="number" id="apertura-monto" class="form-input" placeholder="Ej: 5000" style="font-size:20px; text-align:center; font-weight:bold; color:var(--gold-bright);" />
+        </div>
+
+        <button class="btn btn-primary" style="width:100%; padding:14px; font-size:16px;" onclick="window.confirmApertura()">Abrir Caja Ahora</button>
+      </div>
+    </div>
+  `;
+  document.body.insertAdjacentHTML('beforeend', html);
+};
+
+window.confirmApertura = async function() {
+  const montoInput = document.getElementById('apertura-monto').value;
+  const monto = parseFloat(montoInput) || 0;
+  
+  if (monto < 0) {
+    showToast('El monto no puede ser negativo', 'warning');
+    return;
+  }
+
+  const shiftData = {
+    sucursal: window.currentUser.location,
+    estado: 'abierta',
+    abierto_por: window.currentUser.user || window.currentUser.name,
+    monto_inicial: monto
+  };
+
+  try {
+    if (SUPABASE_KEY !== 'TU_ANON_KEY_AQUI') {
+      const res = await db.cash_shifts.openShift(shiftData);
+      if (res && res.length > 0) window.activeShiftData = res[0];
+    }
+    
+    if (window.logUserAction) {
+      window.logUserAction('Apertura de Caja', \`Monto Inicial: \${monto}\`);
+    }
+
+    const m = document.getElementById('apertura-modal');
+    if (m) m.remove();
+    window.updateVendorShiftIndicator(true);
+    showToast('✅ Caja Abierta Exitosamente', 'success');
+
+  } catch (err) {
+    showToast('Error al abrir la caja, reintente.', 'error');
+  }
+};
+
+window.updateVendorShiftIndicator = function(isOpen) {
+  let indicator = document.getElementById('vendor-shift-indicator');
+  if (!indicator) {
+    indicator = document.createElement('div');
+    indicator.id = 'vendor-shift-indicator';
+    indicator.style.cssText = 'position:fixed; bottom:20px; right:20px; z-index:1000; padding:8px 12px; border-radius:20px; font-size:12px; font-weight:700; display:flex; align-items:center; gap:6px; box-shadow:0 4px 12px rgba(0,0,0,0.15);';
+    document.body.appendChild(indicator);
+  }
+
+  if (isOpen) {
+    indicator.innerHTML = '<span style="color:#4caf50;">🟢</span> Caja Abierta';
+    indicator.style.background = 'var(--bg-card)';
+    indicator.style.border = '1px solid rgba(76,175,80,0.3)';
+    indicator.style.color = 'var(--text-primary)';
+  } else {
+    indicator.innerHTML = '<span style="color:#f44336;">🔴</span> Caja Cerrada';
+    indicator.style.background = 'rgba(244,67,54,0.1)';
+    indicator.style.border = '1px solid rgba(244,67,54,0.3)';
+    indicator.style.color = '#f44336';
+  }
+};
+
+window.renderAdminShiftIndicators = async function() {
+  if (SUPABASE_KEY === 'TU_ANON_KEY_AQUI' || typeof db === 'undefined') return;
+
+  try {
+    const lanus = await db.cash_shifts.getActive('lanus');
+    const belgrano = await db.cash_shifts.getActive('belgrano');
+
+    const lanusOpen = lanus && lanus.length > 0;
+    const belgranoOpen = belgrano && belgrano.length > 0;
+
+    let adminIndicators = document.getElementById('admin-shift-indicators');
+    if (!adminIndicators) {
+      adminIndicators = document.createElement('div');
+      adminIndicators.id = 'admin-shift-indicators';
+      adminIndicators.style.cssText = 'display:flex; gap:10px; align-items:center; margin-right:15px; font-size:11px; font-weight:600; padding:6px 12px; background:rgba(0,0,0,0.03); border-radius:8px; border:1px solid var(--border-subtle);';
+      const rightBar = document.querySelector('.topbar-right');
+      if (rightBar) rightBar.insertBefore(adminIndicators, rightBar.firstChild);
+    }
+
+    if (adminIndicators) {
+      adminIndicators.innerHTML = `
+        <span style="color:${lanusOpen ? 'var(--green)' : 'var(--text-muted)'}">${lanusOpen ? '🟢' : '🔴'} LANÚS</span>
+        <span style="color:var(--border-subtle)">|</span>
+        <span style="color:${belgranoOpen ? 'var(--green)' : 'var(--text-muted)'}">${belgranoOpen ? '🟢' : '🔴'} BELGRANO</span>
+      `;
+    }
+  } catch (err) {}
 };
 
 window.addEventListener('DOMContentLoaded', window.init);
