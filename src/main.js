@@ -111,6 +111,55 @@ window.updateClock = function() {
   el.textContent = now.toLocaleDateString('es-AR', opts);
 };
 
+// ─── Carga Centralizada de Datos ──────────────
+window.loadAllData = async function(force = false) {
+  if (!force && window.dataLoaded) return;
+  
+  if (typeof SUPABASE_KEY === 'undefined' || SUPABASE_KEY === 'TU_ANON_KEY_AQUI' || typeof db === 'undefined') {
+    console.log('Modo Mock Activo: No se cargan datos remotos.');
+    window.dataLoaded = true;
+    return;
+  }
+
+  try {
+    console.log('🔄 Sincronizando datos con Supabase...');
+    const [repairs, stock, sales, transfers, withdrawals] = await Promise.all([
+      db.repairs.getAll(),
+      db.stock.getAll(),
+      db.sales.getAll(),
+      db.transfers.getAll(),
+      db.withdrawals.getAll()
+    ]);
+
+    if (repairs) DATA.repairs = repairs;
+    if (sales) DATA.sales = sales;
+    if (transfers) DATA.transfers = transfers;
+    if (withdrawals) DATA.withdrawals = withdrawals;
+    
+    if (stock && stock.length > 0) {
+      // Mezclar stock remoto con mock para no perder imágenes
+      DATA.stock = DATA.stock.map(localItem => {
+        const remoteItem = stock.find(r => r.nombre === localItem.nombre || r.id === localItem.id);
+        if (remoteItem) {
+          return { ...localItem, ...remoteItem, imagen: localItem.imagen || remoteItem.imagen };
+        }
+        return localItem;
+      });
+    }
+
+    window.dataLoaded = true;
+    console.log('✅ Datos sincronizados correctamente.');
+    
+    // Re-renderizar vista actual si es necesario
+    const fnName = 'render' + window.currentView.charAt(0).toUpperCase() + window.currentView.slice(1);
+    if (typeof window[fnName] === 'function') window[fnName]();
+
+  } catch (err) {
+    console.error('Error cargando datos de Supabase:', err);
+    showToast('⚠️ Error al sincronizar con la nube. Usando datos locales.', 'warning');
+  }
+};
+
 // ─── Init ────────────────────────────────────
 window.init = function() {
   try {
@@ -199,6 +248,9 @@ window.init = function() {
     setInterval(updateClock, 60000);
     
     if (typeof testSupabaseConnection === 'function') testSupabaseConnection();
+
+    // Cargar datos al iniciar sesión
+    window.loadAllData();
 
     if (role === 'vendor') {
       checkCashShift();

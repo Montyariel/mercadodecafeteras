@@ -18,14 +18,7 @@ async function renderSales() {
   const v = document.getElementById('view-sales');
   if (!v.innerHTML) v.innerHTML = '<div class="loading">Cargando ventas...</div>';
 
-  try {
-    if (SUPABASE_KEY !== 'TU_ANON_KEY_AQUI') {
-      const remoteSales = await db.sales.getAll();
-      if (remoteSales) DATA.sales = remoteSales;
-    }
-  } catch (err) {
-    console.warn('Usando mock data para ventas:', err);
-  }
+  // Los datos de ventas ya se cargan de forma centralizada en init/loadAllData
 
   const isAdmin = currentUser && currentUser.role === 'admin';
   const isWarehouse = currentUser && currentUser.role === 'warehouse';

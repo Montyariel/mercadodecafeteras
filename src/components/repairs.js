@@ -34,16 +34,6 @@ window.renderRepairs = async function renderRepairs() {
   // Mostrar loading o usar mock mientras carga
   if (!v.innerHTML) v.innerHTML = '<div class="loading">Cargando reparaciones...</div>';
 
-  try {
-    // Intentar traer de Supabase
-    if (SUPABASE_KEY !== 'TU_ANON_KEY_AQUI') {
-      const remoteData = await db.repairs.getAll();
-      if (remoteData) DATA.repairs = remoteData;
-    }
-  } catch (err) {
-    console.warn('Usando mock data para reparaciones:', err);
-  }
-
   v.innerHTML = `
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:22px;flex-wrap:wrap;gap:12px;">
       <div style="display:flex;gap:8px;flex-wrap:wrap;">

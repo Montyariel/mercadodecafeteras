@@ -13,58 +13,34 @@ window.renderDashboard = async function() {
   let loc = 'lanus';
 
   try {
-    // 1. Intentar cargar datos de Supabase
-    if (typeof SUPABASE_KEY !== 'undefined' && SUPABASE_KEY !== 'TU_ANON_KEY_AQUI' && typeof db !== 'undefined') {
-      try {
-        const [remoteRepairs, remoteStock, remoteSales] = await Promise.all([
-          db.repairs.getAll(),
-          db.stock.getAll(),
-          db.sales.getAll()
-        ]);
-        
-        if (remoteRepairs) DATA.repairs = remoteRepairs;
-        if (remoteStock && remoteStock.length > 0) {
-          const localCopy = [...DATA.stock];
-          DATA.stock = localCopy.map(localItem => {
-            const remoteItem = remoteStock.find(r => r.nombre === localItem.nombre);
-            if (remoteItem) {
-              return { ...localItem, ...remoteItem, imagen: localItem.imagen || remoteItem.imagen };
-            }
-            return localItem;
-          });
-        }
-        if (remoteSales) DATA.sales = remoteSales;
+    // 1. Preparar datos para el render (KPIs se calculan al vuelo si no existen o se mantienen los de la carga inicial)
+    
+    // Si DATA.kpis está vacío o queremos recalcular, lo hacemos aquí pero sin llamar a la DB
+    const now = new Date();
+    const currentMonth = now.getMonth();
+    const currentYear = now.getFullYear();
 
-        // Recalcular KPIs
-        const now = new Date();
-        const currentMonth = now.getMonth();
-        const currentYear = now.getFullYear();
+    const salesThisMonth = DATA.sales.filter(s => {
+      const d = new Date(s.fecha || s.created_at || s.fecha_str);
+      return d.getMonth() === currentMonth && d.getFullYear() === currentYear;
+    });
 
-        const salesThisMonth = DATA.sales.filter(s => {
-          const d = new Date(s.fecha || s.created_at);
-          return d.getMonth() === currentMonth && d.getFullYear() === currentYear;
-        });
+    const repairsThisMonth = DATA.repairs.filter(r => {
+      const d = new Date(r.created_at || r.fecha);
+      return d.getMonth() === currentMonth && d.getFullYear() === currentYear;
+    });
 
-        const repairsThisMonth = DATA.repairs.filter(r => {
-          const d = new Date(r.created_at);
-          return d.getMonth() === currentMonth && d.getFullYear() === currentYear;
-        });
+    ['lanus', 'belgrano'].forEach(lkey => {
+      const locSales = salesThisMonth.filter(s => s.sucursal === lkey);
+      const locRepairs = repairsThisMonth.filter(r => r.sucursal === lkey);
 
-        ['lanus', 'belgrano'].forEach(lkey => {
-          const locSales = salesThisMonth.filter(s => s.sucursal === lkey);
-          const locRepairs = repairsThisMonth.filter(r => r.sucursal === lkey);
-
-          DATA.kpis[lkey] = {
-            ventas_mes: locSales.reduce((sum, s) => sum + (s.total || 0), 0),
-            reparaciones_mes: locRepairs.length,
-            reparaciones_pendientes: DATA.repairs.filter(r => r.sucursal === lkey && r.estado !== 'entregado').length,
-            ticket_promedio: locSales.length ? Math.round(locSales.reduce((sum, s) => sum + (s.total || 0), 0) / locSales.length) : 0
-          };
-        });
-      } catch (dbErr) {
-        console.warn('Dashboard: Fallo al traer datos remotos, usando locales.', dbErr);
-      }
-    }
+      DATA.kpis[lkey] = {
+        ventas_mes: locSales.reduce((sum, s) => sum + (s.total || 0), 0),
+        reparaciones_mes: locRepairs.length,
+        reparaciones_pendientes: DATA.repairs.filter(r => r.sucursal === lkey && r.estado !== 'entregado').length,
+        ticket_promedio: locSales.length ? Math.round(locSales.reduce((sum, s) => sum + (s.total || 0), 0) / locSales.length) : 0
+      };
+    });
 
     // 2. Preparar datos para el render
     const l = DATA.kpis.lanus || { ventas_mes: 0, reparaciones_mes: 0, reparaciones_pendientes: 0, ticket_promedio: 0 };

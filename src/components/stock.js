@@ -17,26 +17,7 @@ window.renderStock = async function() {
   // Mostrar loading inicial
   if (!v.innerHTML) v.innerHTML = '<div class="loading">Cargando inventario...</div>';
 
-  try {
-    if (typeof SUPABASE_KEY !== 'undefined' && SUPABASE_KEY !== 'TU_ANON_KEY_AQUI' && typeof db !== 'undefined') {
-      try {
-        const remoteStock = await db.stock.getAll();
-        if (remoteStock && remoteStock.length > 0) {
-          DATA.stock = DATA.stock.map(localItem => {
-            const remoteItem = remoteStock.find(r => r.nombre === localItem.nombre);
-            if (remoteItem) {
-              return { ...localItem, ...remoteItem, imagen: localItem.imagen || remoteItem.imagen };
-            }
-            return localItem;
-          });
-        }
-      } catch (dbErr) {
-        console.warn('Stock: Error conectando a Supabase, usando locales.', dbErr);
-      }
-    }
-  } catch (err) {
-    console.warn('Error general en carga de stock:', err);
-  }
+  // Los datos de stock ya se cargan de forma centralizada en init/loadAllData
 
   const role = (window.currentUser && window.currentUser.role) ? window.currentUser.role : 'vendor';
   const isAdminOrWarehouse = (role === 'admin' || role === 'warehouse');
