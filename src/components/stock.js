@@ -51,7 +51,7 @@ window.renderStock = async function() {
     </div>
 
     <!-- Table -->
-    <div class="card" style="padding:0;overflow:hidden;">
+    <div class="card" style="padding: 16px 0 24px 0;">
       <div style="padding:18px 24px;border-bottom:1px solid var(--border-subtle);">
         <span class="section-title">Inventario Completo</span>
       </div>

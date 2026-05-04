@@ -25,7 +25,7 @@ window.renderAuditLogs = async function () {
       <div style="font-size:12px; color:var(--text-muted);">Registro inmutable de movimientos</div>
     </div>
 
-    <div class="card" style="padding:0;overflow:hidden;">
+    <div class="card" style="padding: 16px 0 24px 0;">
       <table class="data-table">
         <thead>
           <tr>

@@ -24,7 +24,7 @@ function renderHistory() {
       </div>
     </div>
 
-    <div class="card" style="padding:0; overflow:hidden;">
+    <div class="card" style="padding: 16px 0 24px 0;">
       <table class="history-table" style="width:100%; border-collapse:collapse; min-width:800px;">
         <thead style="background:var(--bg-secondary); border-bottom:1px solid var(--border-subtle);">
           <tr>

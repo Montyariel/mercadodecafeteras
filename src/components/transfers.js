@@ -49,7 +49,7 @@ window.renderTransfers = async function () {
       </div>
     </div>
 
-    <div class="card" style="padding:0;overflow:hidden;">
+    <div class="card" style="padding: 12px 0;">
       <table class="data-table">
         <thead>
           <tr>

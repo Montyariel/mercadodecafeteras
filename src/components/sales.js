@@ -51,7 +51,7 @@ async function renderSales() {
     </div>
 
     <!-- Sales table -->
-    <div class="card" style="padding:0;overflow:hidden;">
+    <div class="card" style="padding: 16px 0 24px 0;">
       <div style="display:flex;align-items:center;justify-content:space-between;padding:18px 24px;border-bottom:1px solid var(--border-subtle);">
         <span class="section-title">Últimas Ventas</span>
         <div style="${isAdmin ? 'display:none;' : ''}">
@@ -89,7 +89,7 @@ async function renderSales() {
     </div>
 
     <!-- Egresos del día -->
-    <div class="card" style="padding:0;overflow:hidden;margin-top:20px;">
+    <div class="card" style="padding: 16px 0 24px 0; margin-top:20px;">
       <div style="padding:18px 24px;border-bottom:1px solid var(--border-subtle);">
         <span class="section-title" style="color:var(--red);">Salidas de Efectivo de Hoy</span>
       </div>
