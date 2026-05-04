@@ -410,6 +410,7 @@ async function saveSale() {
   };
 
   // 2. Persistir en Supabase de forma segura
+  let syncSuccess = true;
   try {
     if (SUPABASE_KEY !== 'TU_ANON_KEY_AQUI') {
       const insertion = db.sales.insert(newSale);
@@ -421,7 +422,8 @@ async function saveSale() {
     }
   } catch (err) {
     console.error('Error al registrar venta mixta:', err);
-    showToast('⚠️ Problema de conexión, pero se guardó localmente.', 'warning');
+    syncSuccess = false;
+    showToast('⚠️ Problema de conexión. Se guardó localmente.', 'warning');
   }
 
   DATA.sales.unshift({ fecha: fechaStr, ...newSale });
@@ -432,7 +434,10 @@ async function saveSale() {
 
   closeSaleModal();
   renderSales();
-  showToast(`✅ Venta exitosa. Total cobrado: ${formatCurrency(paymentsTotal)}`, 'success');
+  
+  if (syncSuccess) {
+    showToast(`✅ Venta exitosa. Total cobrado: ${formatCurrency(paymentsTotal)}`, 'success');
+  }
 }
 
 // ─── Renderizar Gastos de Hoy ─────────────────────────
@@ -441,14 +446,8 @@ async function renderExpenses() {
   if (!tbody) return;
 
   let withdrawals = [];
-  try {
-    if (SUPABASE_KEY !== 'TU_ANON_KEY_AQUI') {
-      const res = await db.withdrawals.getAll(); 
-      if (res) DATA.withdrawals = res;
-    }
-  } catch (err) {
-    console.warn('Usando mock data para egresos:', err);
-  }
+  // Se eliminó la carga automática aquí para usar la centralizada en loadAllData (main.js)
+  // y evitar pérdida de estado local durante la navegación.
   
   withdrawals = DATA.withdrawals || [];
   
@@ -554,35 +553,50 @@ async function submitExpense() {
     fecha: new Date().toISOString()
   };
 
+  let syncSuccess = true;
   try {
     const btn = document.querySelector('#expense-modal .btn-primary');
-    btn.disabled = true;
-    btn.innerText = 'Registrando...';
+    if (btn) {
+      btn.disabled = true;
+      btn.innerText = 'Registrando...';
+    }
 
     if (SUPABASE_KEY !== 'TU_ANON_KEY_AQUI') {
       await db.withdrawals.insert(withdrawalData);
-    } else {
-      DATA.withdrawals.push(withdrawalData);
     }
     
+    // Siempre agregar localmente para evitar pérdida de estado hasta la próxima sincronización
+    if (!DATA.withdrawals) DATA.withdrawals = [];
+    DATA.withdrawals.push(withdrawalData);
+
     if (window.logUserAction) {
       window.logUserAction('Retiro de Efectivo', `Monto: ${amount} | Categ: ${category} | Motivo: ${reason}`);
     }
 
-    // Cerrar el modal inmediatamente para quitar el fondo difuminado
+    // Cerrar el modal inmediatamente
     document.getElementById('expense-modal').remove();
     
     // Descargar el vale de caja automáticamente
     downloadExpenseReceipt(amount, category, reason);
     
-    // Refrescar la tabla para que se vea el movimiento exitoso
+    // Refrescar la tabla
     renderExpenses();
+    
+    showToast('✅ Egreso registrado correctamente', 'success');
   } catch (err) {
     console.error('ERROR DATABASE:', err);
-    alert('Fallo al guardar en la base de datos: ' + (err.message || err));
-    const modalBtn = document.querySelector('#expense-modal .btn-primary');
-    if (modalBtn) modalBtn.disabled = false;
-    modalBtn.innerText = 'Reintentar';
+    syncSuccess = false;
+    showToast('⚠️ Error de conexión, pero se guardó localmente.', 'warning');
+    
+    // Aún así guardamos localmente si falló el insert
+    if (!DATA.withdrawals) DATA.withdrawals = [];
+    DATA.withdrawals.push(withdrawalData);
+    
+    const modal = document.getElementById('expense-modal');
+    if (modal) modal.remove();
+    
+    downloadExpenseReceipt(amount, category, reason);
+    renderExpenses();
   }
 }
 

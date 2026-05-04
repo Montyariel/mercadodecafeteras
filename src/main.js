@@ -131,32 +131,50 @@ window.loadAllData = async function(force = false) {
       db.withdrawals.getAll()
     ]);
 
-    if (repairs) DATA.repairs = repairs;
-    if (sales) DATA.sales = sales;
-    if (transfers) DATA.transfers = transfers;
-    if (withdrawals) DATA.withdrawals = withdrawals;
+    // Helper de unión para no perder datos locales que aún no están en la nube (ej: falló el insert)
+    const mergeCollection = (local, remote, idField = 'id') => {
+      if (!remote) return local;
+      const remoteIds = new Set(remote.map(r => r[idField]));
+      // Mantener lo que está en remoto + lo que está local pero NO está en remoto (nuevos/pendientes)
+      const localOnly = local.filter(l => l[idField] && !remoteIds.has(l[idField]));
+      return [...remote, ...localOnly];
+    };
+
+    if (repairs) DATA.repairs = mergeCollection(DATA.repairs, repairs);
+    if (sales)   DATA.sales   = mergeCollection(DATA.sales,   sales);
+    if (transfers) DATA.transfers = mergeCollection(DATA.transfers, transfers);
+    if (withdrawals) DATA.withdrawals = mergeCollection(DATA.withdrawals, withdrawals);
     
+    // El stock es especial por las imágenes y porque remote es la verdad absoluta de cantidades
     if (stock && stock.length > 0) {
-      // Mezclar stock remoto con mock para no perder imágenes
-      DATA.stock = DATA.stock.map(localItem => {
-        const remoteItem = stock.find(r => r.nombre === localItem.nombre || r.id === localItem.id);
-        if (remoteItem) {
+      const mergedStock = stock.map(remoteItem => {
+        const localItem = DATA.stock.find(l => l.id === remoteItem.id || l.nombre === remoteItem.nombre);
+        if (localItem) {
           return { ...localItem, ...remoteItem, imagen: localItem.imagen || remoteItem.imagen };
         }
-        return localItem;
+        return remoteItem;
       });
+      
+      // Añadimos locales que no están en remoto (nuevos productos creados localmente)
+      DATA.stock.forEach(localItem => {
+        if (!stock.find(r => r.id === localItem.id || r.nombre === localItem.nombre)) {
+          mergedStock.push(localItem);
+        }
+      });
+      
+      DATA.stock = mergedStock;
     }
 
     window.dataLoaded = true;
     console.log('✅ Datos sincronizados correctamente.');
     
-    // Re-renderizar vista actual si es necesario
+    // Re-renderizar vista actual
     const fnName = 'render' + window.currentView.charAt(0).toUpperCase() + window.currentView.slice(1);
     if (typeof window[fnName] === 'function') window[fnName]();
 
   } catch (err) {
     console.error('Error cargando datos de Supabase:', err);
-    showToast('⚠️ Error al sincronizar con la nube. Usando datos locales.', 'warning');
+    showToast('⚠️ Error al sincronizar con la nube.', 'warning');
   }
 };
 

@@ -7,14 +7,8 @@ window.renderTransfers = async function () {
 
   if (!v.innerHTML) v.innerHTML = '<div class="loading">Cargando logística...</div>';
 
-  try {
-    if (SUPABASE_KEY !== 'TU_ANON_KEY_AQUI') {
-      const remoteTransfers = await db.transfers.getAll();
-      if (remoteTransfers) DATA.transfers = remoteTransfers;
-    }
-  } catch (err) {
-    console.warn('Usando mock data para traslados:', err);
-  }
+  // Se eliminó la carga automática aquí para usar la centralizada en loadAllData (main.js)
+  // y evitar pérdida de estado local durante la navegación.
 
   const isAdmin = currentUser && currentUser.role === 'admin';
   const isWarehouse = currentUser && currentUser.role === 'warehouse';
@@ -252,18 +246,24 @@ window.createRequest = async function () {
     estado: 'solicitado'
   };
 
+  let syncSuccess = true;
   try {
     if (SUPABASE_KEY !== 'TU_ANON_KEY_AQUI') {
       await db.transfers.insert(newReq);
     }
   } catch (e) {
-    showToast('⚠️ Error conexión', 'warning');
+    console.error('Error al solicitar traslado:', e);
+    syncSuccess = false;
+    showToast('⚠️ Error de conexión con la nube. Se guardó localmente.', 'warning');
   }
 
   DATA.transfers.unshift(newReq);
   closeRequestModal();
   renderTransfers();
-  showToast('Solicitud enviada al Depósito', 'success');
+  
+  if (syncSuccess) {
+    showToast('✅ Solicitud enviada al Depósito', 'success');
+  }
 }
 
 window.approveRequest = async function (trId) {
@@ -345,12 +345,14 @@ window.createTransfer = async function () {
     }
   }
 
+  let syncSuccess = true;
   try {
     if (SUPABASE_KEY !== 'TU_ANON_KEY_AQUI') {
       await Promise.all(pUpdates);
     }
   } catch (err) {
     console.warn('Error en Supabase, aplicando ROLLBACK', err);
+    syncSuccess = false;
     showToast('⚠️ Falla de conectividad. Revirtiendo transacción.', 'error');
 
     // Rollback: Revertir stock local descontado
@@ -368,7 +370,10 @@ window.createTransfer = async function () {
 
   closeTransferModal();
   renderTransfers();
-  showToast('🚚 Envío múltiple registrado con éxito', 'success');
+  
+  if (syncSuccess) {
+    showToast('🚚 Envío múltiple registrado con éxito', 'success');
+  }
 
   if (window.logUserAction) {
     const nombresProds = window.transferCart.map(c => `${c.qty}x ${c.nombre}`).join(', ');
