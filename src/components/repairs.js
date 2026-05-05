@@ -379,7 +379,30 @@ window.repairCardHTML = function repairCardHTML(r, colKey) {
   `;
 }
 
-// ─── Avanzar estado ───────────────────────
+window.advanceRepair = async function advanceRepair(id, newState) {
+  const repair = DATA.repairs.find(r => r.id === id);
+  if (repair) {
+    repair.estado = newState;
+    if (newState === 'entregado') {
+      repair.fechaEntrega = new Date();
+    }
+
+    // Persistir en Supabase
+    let syncSuccess = true;
+    try {
+      if (SUPABASE_KEY !== 'TU_ANON_KEY_AQUI') {
+        const updates = { 
+          estado: newState, 
+          fecha_entrega: repair.fechaEntrega ? repair.fechaEntrega.toISOString() : null 
+        };
+        await db.repairs.update(id, updates);
+      }
+    } catch (err) {
+      console.error('Error al actualizar en Supabase:', err);
+      syncSuccess = false;
+      showToast('⚠️ Error de conexión con la nube. Se guardó localmente.', 'warning');
+    }
+    
     if (syncSuccess) {
       const msgs = { 
         progreso: '🟡 Diagnóstico iniciado', 

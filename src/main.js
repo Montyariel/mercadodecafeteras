@@ -182,6 +182,13 @@ window.loadAllData = async function(force = false) {
         window[fnName]();
       }
     }
+  } catch (err) {
+    console.error('Error cargando datos de Supabase:', err);
+    if (force) showToast('⚠️ Error al sincronizar con la nube.', 'warning');
+  } finally {
+    window.isSyncing = false;
+  }
+};
 
 window.updateBadges = function() {
   const repairsCount = DATA.repairs.filter(r => r.estado === 'recibido' || r.estado === 'progreso').length;
@@ -197,14 +204,6 @@ window.updateBadges = function() {
   if (bTransfers) {
     bTransfers.textContent = transfersCount > 0 ? transfersCount : '';
     bTransfers.className = 'nav-badge' + (transfersCount > 0 ? ' active' : '');
-  }
-};
-
-  } catch (err) {
-    console.error('Error cargando datos de Supabase:', err);
-    if (force) showToast('⚠️ Error al sincronizar con la nube.', 'warning');
-  } finally {
-    window.isSyncing = false;
   }
 };
 
