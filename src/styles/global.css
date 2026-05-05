@@ -549,3 +549,53 @@ html, body {
 .text-red { color: var(--red); }
 .text-blue { color: var(--blue); }
 .font-display { font-family: var(--font-display); }
+
+/* --- NUEVOS ESTILOS DASHBOARD EJECUTIVO --- */
+.kpi-trend {
+  display: inline-flex; align-items: center; gap: 4px;
+  font-size: 11px; font-weight: 700; padding: 2px 8px;
+  border-radius: 99px; text-transform: uppercase; letter-spacing: .4px;
+}
+.trend-up { background: rgba(76,175,130,0.15); color: var(--green); }
+.trend-down { background: rgba(224,85,85,0.15); color: var(--red); }
+.trend-flat { background: rgba(165,158,150,0.15); color: var(--text-muted); }
+
+.qt-header {
+  padding: 18px 24px;
+  border-bottom: 1px solid var(--border-subtle);
+  background: rgba(200,140,60,0.05);
+}
+
+.qt-row:hover {
+  background: rgba(200,140,60,0.05);
+}
+
+.loading-overlay {
+  position: absolute; inset: 0; background: var(--bg-base);
+  display: flex; align-items: center; justify-content: center; z-index: 10;
+}
+
+.loading {
+  font-family: var(--font-display);
+  font-weight: 600;
+  color: var(--gold-mid);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 40px;
+  gap: 10px;
+}
+
+canvas {
+  max-width: 100%;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.card {
+  animation: fadeIn 0.4s ease-out;
+}
+

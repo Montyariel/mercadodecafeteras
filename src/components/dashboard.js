@@ -2,193 +2,444 @@
 // DASHBOARD — Mercado de Cafeteras
 // ==========================================
 
-// Usamos window para asegurar visibilidad global y evitar "not defined"
+window.dashboardPeriod = 'mes'; // Periodo por defecto
+window.dashboardCharts = {}; // Para guardar las instancias de Chart.js
+
 window.renderDashboard = async function() {
   const v = document.getElementById('view-dashboard');
   if (!v) return;
-  if (!v.innerHTML) v.innerHTML = '<div class="loading">Cargando dashboard...</div>';
 
-  let isAdmin = false;
-  let isWarehouse = false;
-  let loc = 'lanus';
+  const isAdmin = currentUser && currentUser.role === 'admin';
+  const isWarehouse = currentUser && currentUser.role === 'warehouse';
+  
+  // Solo Admin y Depósito ven el Dashboard Ejecutivo Premium
+  if (!isAdmin && !isWarehouse) {
+    return renderVendorDashboard(v);
+  }
 
-  try {
-    // 1. Preparar datos para el render (KPIs se calculan al vuelo si no existen o se mantienen los de la carga inicial)
-    
-    // Si DATA.kpis está vacío o queremos recalcular, lo hacemos aquí pero sin llamar a la DB
-    const now = new Date();
-    const currentMonth = now.getMonth();
-    const currentYear = now.getFullYear();
+  if (!v.innerHTML || v.innerHTML.includes('loading')) {
+    v.innerHTML = '<div class="loading">Cargando dashboard ejecutivo...</div>';
+  }
 
-    const salesThisMonth = DATA.sales.filter(s => {
-      const d = new Date(s.fecha || s.created_at || s.fecha_str);
-      return d.getMonth() === currentMonth && d.getFullYear() === currentYear;
-    });
+  // 1. Filtrado de datos por periodo
+  const filteredSales = filterDataByPeriod(DATA.sales, window.dashboardPeriod);
+  const filteredRepairs = filterDataByPeriod(DATA.repairs, window.dashboardPeriod);
+  
+  // 2. Cálculos de KPIs
+  const totalVentas = filteredSales.reduce((acc, s) => acc + (s.total || 0), 0);
+  const ticketPromedio = filteredSales.length > 0 ? Math.round(totalVentas / filteredSales.length) : 0;
+  
+  const repsEnCurso = DATA.repairs.filter(r => !['entregado', 'rechazado'].includes(r.estado)).length;
+  const repsListas = DATA.repairs.filter(r => r.estado === 'listo').length;
+  
+  const stockCritico = DATA.stock.filter(s => (s.lanus + s.belgrano + s.deposito) <= s.min).length;
+  const stockBajo = DATA.stock.filter(s => {
+    const total = s.lanus + s.belgrano + s.deposito;
+    return total > s.min && total <= s.min * 1.5;
+  }).length;
 
-    const repairsThisMonth = DATA.repairs.filter(r => {
-      const d = new Date(r.created_at || r.fecha);
-      return d.getMonth() === currentMonth && d.getFullYear() === currentYear;
-    });
-
-    ['lanus', 'belgrano'].forEach(lkey => {
-      const locSales = salesThisMonth.filter(s => s.sucursal === lkey);
-      const locRepairs = repairsThisMonth.filter(r => r.sucursal === lkey);
-
-      DATA.kpis[lkey] = {
-        ventas_mes: locSales.reduce((sum, s) => sum + (s.total || 0), 0),
-        reparaciones_mes: locRepairs.length,
-        reparaciones_pendientes: DATA.repairs.filter(r => r.sucursal === lkey && r.estado !== 'entregado').length,
-        ticket_promedio: locSales.length ? Math.round(locSales.reduce((sum, s) => sum + (s.total || 0), 0) / locSales.length) : 0
-      };
-    });
-
-    // 2. Preparar datos para el render
-    const l = DATA.kpis.lanus || { ventas_mes: 0, reparaciones_mes: 0, reparaciones_pendientes: 0, ticket_promedio: 0 };
-    const b = DATA.kpis.belgrano || { ventas_mes: 0, reparaciones_mes: 0, reparaciones_pendientes: 0, ticket_promedio: 0 };
-    
-    const totalVentas = (l.ventas_mes || 0) + (b.ventas_mes || 0);
-    const totalReparaciones = (l.reparaciones_mes || 0) + (b.reparaciones_mes || 0);
-    const pending = (l.reparaciones_pendientes || 0) + (b.reparaciones_pendientes || 0);
-
-    const criticalStock = DATA.stock.filter(s => {
-      const qty = (s.lanus || 0) + (s.belgrano || 0) + (s.deposito || 0);
-      return qty <= s.min;
-    });
-
-    if (typeof currentUser !== 'undefined' && currentUser) {
-      isAdmin = currentUser.role === 'admin';
-      isWarehouse = currentUser.role === 'warehouse';
-      loc = currentUser.location || 'lanus';
-    }
-    
-    const isTotalView = isAdmin || isWarehouse;
-    const branchKPI = DATA.kpis[loc] || l;
-    const branchName = (DATA.branches && DATA.branches[loc]) ? DATA.branches[loc].name : loc;
-
-    // 3. Renderizar HTML
-    v.innerHTML = `
-      <div class="grid-4" style="margin-bottom:22px;">
-        ${kpiCard('💰', 'Ventas del Mes', formatCurrency(isTotalView ? totalVentas : branchKPI.ventas_mes), isTotalView ? 'Ambas sucursales' : branchName, isTotalView ? '+12%' : '', 'up')}
-        ${kpiCard('🔧', 'Reparaciones', isTotalView ? totalReparaciones : branchKPI.reparaciones_mes, 'Completadas mes', '+8', 'up')}
-        ${kpiCard('⏳', 'En Espera', isTotalView ? pending : branchKPI.reparaciones_pendientes, 'Trabajos hoy', '—', 'flat')}
-        ${kpiCard('🛒', 'Ticket Prom.', formatCurrency(isTotalView ? Math.round((l.ticket_promedio + b.ticket_promedio) / 2) : branchKPI.ticket_promedio), 'Promedio actual', '+5%', 'up')}
+  // 3. Renderizar Estructura
+  v.innerHTML = `
+    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:30px; flex-wrap:wrap; gap:15px;">
+      <div>
+        <h2 class="font-display" style="font-size:24px; margin-bottom:4px;">Dashboard Ejecutivo</h2>
+        <p style="color:var(--text-secondary); font-size:14px;">Resumen operativo — ${getPeriodLabel(window.dashboardPeriod)}</p>
       </div>
-
-      <div class="grid-2" style="margin-bottom:22px;">
-        <div class="card">
-          <div class="section-header">
-            <span class="section-title">Ventas por Día — Esta Semana</span>
-            <span class="section-tag">${isTotalView ? 'Ambas sucursales' : 'Tu sucursal'}</span>
-          </div>
-          <div class="bar-compare" id="bar-chart"></div>
-          <div class="bar-legend">
-            ${(isTotalView || loc === 'lanus') ? '<span class="legend-item"><span class="legend-dot" style="background:var(--gold-bright)"></span>Lanús</span>' : ''}
-            ${(isTotalView || loc === 'belgrano') ? '<span class="legend-item"><span class="legend-dot" style="background:var(--blue)"></span>Belgrano</span>' : ''}
-          </div>
-        </div>
-
-        <div class="card" style="${isTotalView ? '' : 'display:none;'}">
-          <div class="section-header">
-            <span class="section-title">Desglose por Sucursal</span>
-            <span class="section-tag">Mes actual</span>
-          </div>
-          <div style="margin-bottom:18px;">
-            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
-              <span style="font-size:13px;font-weight:600;color:var(--gold-bright)">☕ Lanús</span>
-              <span style="font-size:14px;font-weight:700;">${formatCurrency(l.ventas_mes)}</span>
-            </div>
-            ${progressRow('Ventas mes', Math.round(l.ventas_mes / (totalVentas || 1) * 100), '', '')}
-          </div>
-          <div>
-            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
-              <span style="font-size:13px;font-weight:600;color:var(--blue)">🏢 Belgrano</span>
-              <span style="font-size:14px;font-weight:700;">${formatCurrency(b.ventas_mes)}</span>
-            </div>
-            ${progressRow('Ventas mes', Math.round(b.ventas_mes / (totalVentas || 1) * 100), 'blue', '')}
-          </div>
-        </div>
+      <div style="display:flex; gap:10px; align-items:center;">
+        <span style="font-size:12px; color:var(--text-muted); font-weight:600;">FILTRAR:</span>
+        <select class="form-input" id="dash-period-selector" onchange="changeDashboardPeriod(this.value)" style="width:140px; background:var(--bg-card); border-color:var(--border-glow);">
+          <option value="hoy" ${window.dashboardPeriod === 'hoy' ? 'selected' : ''}>Hoy</option>
+          <option value="semana" ${window.dashboardPeriod === 'semana' ? 'selected' : ''}>Esta Semana</option>
+          <option value="mes" ${window.dashboardPeriod === 'mes' ? 'selected' : ''}>Este Mes</option>
+          <option value="trimestre" ${window.dashboardPeriod === 'trimestre' ? 'selected' : ''}>Este Trimestre</option>
+          <option value="año" ${window.dashboardPeriod === 'año' ? 'selected' : ''}>Este Año</option>
+        </select>
       </div>
+    </div>
 
-      <div class="card" style="margin-bottom:22px;">
+    <!-- Alertas Rápidas -->
+    <div class="alerts-bar" style="display:grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap:12px; margin-bottom:24px;">
+      ${stockCritico > 0 ? alertItem('⚠️', `${stockCritico} productos sin stock crítico`, 'critical') : ''}
+      ${repsListas > 0 ? alertItem('🔧', `${repsListas} reparaciones listas para entregar`, 'warning') : ''}
+      ${stockBajo > 0 ? alertItem('📦', `${stockBajo} productos con stock bajo`, 'info') : ''}
+    </div>
+
+    <!-- KPIs Principales -->
+    <div class="grid-4" style="margin-bottom:32px;">
+      ${kpiCardPremium('💰', 'Ingresos Totales', formatCurrency(totalVentas), `${filteredSales.length} ventas`, 'ventas', '+12.5%')}
+      ${kpiCardPremium('🔧', 'Reparaciones', repsEnCurso, `${repsListas} listas p/ entregar`, 'reps', '+4')}
+      ${kpiCardPremium('🛒', 'Ticket Promedio', formatCurrency(ticketPromedio), 'Por operación', 'ventas', 'flat')}
+      ${kpiCardPremium('📦', 'Stock Crítico', stockCritico, `Insumos faltantes`, 'stock', stockCritico > 5 ? 'down' : 'flat')}
+    </div>
+
+    <!-- Gráficos -->
+    <div class="grid-2" style="margin-bottom:32px; grid-template-columns: 1.5fr 1fr;">
+      <div class="card" style="padding:24px;">
         <div class="section-header">
-          <span class="section-title">📜 Historial de Máquinas Entregadas</span>
-          <button class="btn btn-ghost" style="font-size:12px;" onclick="navigate('history')">Ver todo →</button>
+          <span class="section-title">Ventas por Día</span>
+          <span class="section-tag">Historial reciente</span>
         </div>
-        <table class="data-table">
-          <thead>
-            <tr><th>ID</th><th>Cliente</th><th>Equipo</th><th>Fecha</th><th>Estado</th></tr>
-          </thead>
-          <tbody>
-            ${DATA.repairs
-              .filter(r => r.estado === 'entregado' && (isAdmin || isWarehouse || window.getRepairBranch(r) === loc))
-              .slice(0, 5).map(r => `
-              <tr>
-                <td style="font-weight:700;color:var(--gold-bright);">${r.id}</td>
-                <td>${r.cliente}</td>
-                <td style="font-size:12px;">${r.modelo}</td>
-                <td style="color:var(--text-muted);font-size:12px;">${(r.fechaEntrega || r.fecha_entrega) ? new Date(r.fechaEntrega || r.fecha_entrega).toLocaleDateString() : '—'}</td>
-                <td><span style="color:var(--green);font-size:11px;font-weight:700;">✅ Entregado</span></td>
-              </tr>
-            `).join('') || '<tr><td colspan="5" style="text-align:center;padding:20px;">No hay máquinas entregadas</td></tr>'}
-          </tbody>
-        </table>
+        <div style="height:300px; position:relative;">
+          <canvas id="chart-ventas-dia"></canvas>
+        </div>
       </div>
-
-      <div class="grid-2">
-        <div class="card">
-          <div class="section-header">
-            <span class="section-title">Reparaciones en Curso</span>
-            <button class="btn btn-ghost" style="font-size:12px;" onclick="navigate('repairs')">Ver todas →</button>
-          </div>
-          <table class="data-table">
-            <thead>
-              <tr><th>ID</th><th>Modelo</th><th>Cliente</th><th>Estado</th></tr>
-            </thead>
-            <tbody>
-              ${DATA.repairs
-                .filter(r => r.estado !== 'entregado' && (isAdmin || isWarehouse || window.getRepairBranch(r) === loc))
-                .slice(0, 5).map(r => `
-                <tr>
-                  <td style="color:var(--text-muted);font-size:11px;">${r.id}</td>
-                  <td style="font-weight:500;">${r.modelo}</td>
-                  <td style="color:var(--text-secondary);">${r.cliente}</td>
-                  <td>${repairStatusBadge(r.estado)}</td>
-                </tr>
-              `).join('')}
-            </tbody>
-          </table>
+      <div class="card" style="padding:24px;">
+        <div class="section-header">
+          <span class="section-title">Medios de Pago</span>
+          <span class="section-tag">Distribución</span>
         </div>
+        <div style="height:300px; position:relative;">
+          <canvas id="chart-pagos"></canvas>
+        </div>
+      </div>
+    </div>
 
-        <div class="card">
-          <div class="section-header">
-            <span class="section-title">⚠️ Alertas de Stock</span>
-            <button class="btn btn-ghost" style="font-size:12px;" onclick="navigate('stock')">Ver inventario →</button>
+    <div class="grid-2" style="margin-bottom:32px;">
+      <div class="card" style="padding:24px;">
+        <div class="section-header">
+          <span class="section-title">Estado de Reparaciones</span>
+          <span class="section-tag">Total acumulado</span>
+        </div>
+        <div style="height:250px; position:relative;">
+          <canvas id="chart-reparaciones"></canvas>
+        </div>
+      </div>
+      <div class="card" style="padding:24px;">
+        <div class="section-header">
+          <span class="section-title">Stock por Categoría</span>
+          <span class="section-tag">Volumen actual</span>
+        </div>
+        <div style="height:250px; position:relative;">
+          <canvas id="chart-stock-cat"></canvas>
+        </div>
+      </div>
+    </div>
+
+    <!-- Top Productos -->
+    <div class="card" style="padding:0; overflow:hidden;">
+      <div class="qt-header" style="padding:20px 24px; border-bottom:1px solid var(--border-subtle); background:rgba(200,140,60,0.05);">
+        <h3 class="font-display" style="font-size:16px;">🔥 Top 5 Productos Más Vendidos</h3>
+      </div>
+      <div class="qt-body">
+        ${renderTopProducts(filteredSales)}
+      </div>
+    </div>
+  `;
+
+  // 4. Inicializar Gráficos con Chart.js
+  setTimeout(() => initDashboardCharts(filteredSales, filteredRepairs), 100);
+};
+
+// --- DASHBOARD PARA VENDEDORES (Mantiene la simplicidad) ---
+function renderVendorDashboard(v) {
+  const loc = currentUser.location || 'lanus';
+  const branchName = loc === 'lanus' ? 'Sucursal Lanús' : 'Sucursal Belgrano';
+  
+  const branchSales = DATA.sales.filter(s => s.sucursal === loc);
+  const totalVentas = branchSales.reduce((acc, s) => acc + (s.total || 0), 0);
+  const pendingRepairs = DATA.repairs.filter(r => r.sucursal === loc && !['entregado', 'rechazado'].includes(r.estado)).length;
+  
+  v.innerHTML = `
+    <div class="intro" style="margin-bottom:30px;">
+      <h2 class="font-display" style="font-size:24px;">Bienvenido/a, ${currentUser.name}</h2>
+      <p style="color:var(--text-secondary); font-size:14px;">Resumen de actividad en ${branchName}</p>
+    </div>
+
+    <div class="grid-3" style="margin-bottom:32px;">
+      ${kpiCard('💰', 'Ventas del Mes', formatCurrency(totalVentas), branchName, '', 'up')}
+      ${kpiCard('🔧', 'Reparaciones', pendingRepairs, 'Trabajos pendientes', '', 'flat')}
+      ${kpiCard('📦', 'Alertas Stock', DATA.stock.filter(s => s[loc] <= s.min).length, 'Stock bajo o crítico', '', 'down')}
+    </div>
+
+    <div class="card">
+       <div class="section-header">
+          <span class="section-title">Ventas Recientes</span>
+       </div>
+       <table class="data-table">
+          <thead><tr><th>Producto</th><th>Total</th></tr></thead>
+          <tbody>
+            ${branchSales.slice(0, 5).map(s => `<tr><td>${s.producto}</td><td>${formatCurrency(s.total)}</td></tr>`).join('')}
+          </tbody>
+       </table>
+    </div>
+  `;
+}
+
+// --- HELPERS ---
+
+window.changeDashboardPeriod = function(p) {
+  window.dashboardPeriod = p;
+  renderDashboard();
+};
+
+function getPeriodLabel(p) {
+  const labels = { hoy: 'Hoy', semana: 'Últimos 7 días', mes: 'Este mes', trimestre: 'Este trimestre', año: 'Este año' };
+  return labels[p] || p;
+}
+
+function filterDataByPeriod(collection, period) {
+  const now = new Date();
+  const start = new Date();
+  
+  if (period === 'hoy') {
+    start.setHours(0,0,0,0);
+  } else if (period === 'semana') {
+    start.setDate(now.getDate() - 7);
+  } else if (period === 'mes') {
+    start.setMonth(now.getMonth(), 1);
+  } else if (period === 'trimestre') {
+    const q = Math.floor(now.getMonth() / 3);
+    start.setMonth(q * 3, 1);
+  } else if (period === 'año') {
+    start.setMonth(0, 1);
+  }
+
+  return collection.filter(item => {
+    const date = new Date(item.fecha || item.created_at || item.opened_at);
+    return date >= start;
+  });
+}
+
+function alertItem(icon, msg, type) {
+  const colors = { critical: 'var(--red)', warning: 'var(--yellow)', info: 'var(--blue)' };
+  return `
+    <div class="card" style="padding:12px 16px; display:flex; align-items:center; gap:12px; border-color:${colors[type]}44; background:${colors[type]}05;">
+      <span style="font-size:18px;">${icon}</span>
+      <span style="font-size:12px; font-weight:600; color:var(--text-primary);">${msg}</span>
+    </div>
+  `;
+}
+
+function kpiCardPremium(icon, label, value, sub, type, trend) {
+  const colors = { ventas: 'var(--gold-mid)', reps: 'var(--green)', stock: 'var(--red)' };
+  const trendHtml = trend !== 'flat' ? `
+    <div style="font-size:10px; font-weight:700; background:rgba(255,255,255,0.05); padding:2px 8px; border-radius:10px; color:${trend.includes('+') ? 'var(--green)' : 'var(--red)'};">
+      ${trend}
+    </div>
+  ` : '';
+
+  return `
+    <div class="kpi-card" style="position:relative; overflow:hidden;">
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
+        <div style="width:40px; height:40px; border-radius:10px; background:${colors[type]}15; color:${colors[type]}; display:flex; align-items:center; justify-content:center; font-size:18px;">
+          ${icon}
+        </div>
+        ${trendHtml}
+      </div>
+      <div style="font-size:11px; text-transform:uppercase; letter-spacing:1px; color:var(--text-muted); margin-bottom:5px; font-weight:700;">${label}</div>
+      <div class="font-display" style="font-size:26px; font-weight:800; color:var(--text-primary); margin-bottom:5px;">${value}</div>
+      <div style="font-size:12px; color:var(--text-secondary);">${sub}</div>
+    </div>
+  `;
+}
+
+function renderTopProducts(sales) {
+  // Contar ventas por producto
+  const counts = {};
+  sales.forEach(s => {
+    counts[s.producto] = (counts[s.producto] || 0) + (s.qty || 1);
+  });
+  
+  const sorted = Object.entries(counts)
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 5);
+    
+  if (sorted.length === 0) return '<div style="padding:30px; text-align:center; color:var(--text-muted);">No hay ventas registradas en este periodo</div>';
+
+  return sorted.map(([name, count], index) => {
+    const item = DATA.stock.find(s => s.nombre === name);
+    const stockTotal = item ? (item.lanus + item.belgrano + item.deposito) : 0;
+    
+    return `
+      <div class="qt-row" style="display:flex; align-items:center; justify-content:space-between; padding:15px 24px; border-bottom:1px solid var(--border-subtle);">
+        <div style="display:flex; align-items:center; gap:15px;">
+          <div style="width:30px; height:30px; border-radius:50%; background:var(--bg-surface); display:flex; align-items:center; justify-content:center; font-weight:800; color:var(--gold-bright); font-size:12px;">${index+1}</div>
+          <div>
+            <div style="font-size:13px; font-weight:600; color:var(--text-primary);">${name}</div>
+            <div style="font-size:11px; color:var(--text-muted);">Stock actual: ${stockTotal} unidades</div>
           </div>
-          ${criticalStock.length === 0
-            ? `<div class="empty-state">✅ Todo el stock está correcto</div>`
-            : criticalStock.slice(0, 5).map(s => `
-                <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 0;border-bottom:1px solid var(--border-subtle);">
-                  <div>
-                    <div style="font-size:13px;font-weight:600;">${s.nombre}</div>
-                    <div style="font-size:11px;color:var(--text-muted);">${s.categoria}</div>
-                  </div>
-                  <div style="display:flex;gap:5px;">
-                    <span class="stock-pill ${getStockStatus(s.lanus + s.belgrano + s.deposito, s.min).cls}">${s.lanus + s.belgrano + s.deposito}</span>
-                  </div>
-                </div>
-              `).join('')
-          }
+        </div>
+        <div style="text-align:right;">
+          <div style="font-size:15px; font-weight:800; color:var(--text-primary);">${count} <span style="font-size:10px; font-weight:400; color:var(--text-muted);">unid.</span></div>
+          <div style="font-size:10px; color:var(--green); font-weight:700; text-transform:uppercase;">🔥 HOT ITEM</div>
         </div>
       </div>
     `;
+  }).join('');
+}
 
-    renderBarChart(isTotalView, loc);
+// --- CHART.JS INIT ---
 
-  } catch (err) {
-    console.error('Error renderDashboard:', err);
-    v.innerHTML = `<div class="error-state">⚠️ Error: ${err.message}</div>`;
+function initDashboardCharts(sales, repairs) {
+  // 1. Ventas por Día (Últimos 7 o 30 días según el periodo)
+  initVentasChart(sales);
+  
+  // 2. Medios de Pago
+  initPagosChart(sales);
+  
+  // 3. Estado de Reparaciones
+  initReparacionesChart();
+  
+  // 4. Stock por Categoría
+  initStockChart();
+}
+
+function initVentasChart(sales) {
+  const ctx = document.getElementById('chart-ventas-dia');
+  if (!ctx) return;
+  
+  // Agrupar por día (últimos 7 días)
+  const days = [];
+  const totals = [];
+  const now = new Date();
+  
+  for (let i = 6; i >= 0; i--) {
+    const d = new Date();
+    d.setDate(now.getDate() - i);
+    const dateStr = d.toLocaleDateString('es-AR', { weekday: 'short', day: 'numeric' });
+    days.push(dateStr);
+    
+    const dayTotal = sales
+      .filter(s => new Date(s.fecha || s.created_at).toDateString() === d.toDateString())
+      .reduce((sum, s) => sum + (s.total || 0), 0);
+    totals.push(dayTotal);
   }
-};
+
+  if (window.dashboardCharts.ventas) window.dashboardCharts.ventas.destroy();
+  
+  window.dashboardCharts.ventas = new Chart(ctx, {
+    type: 'line',
+    data: {
+      labels: days,
+      datasets: [{
+        label: 'Ventas ($)',
+        data: totals,
+        borderColor: '#f0c040',
+        backgroundColor: 'rgba(240,192,64,0.1)',
+        fill: true,
+        tension: 0.4,
+        borderWidth: 3,
+        pointBackgroundColor: '#f0c040',
+        pointRadius: 4
+      }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: { legend: { display: false } },
+      scales: {
+        y: { beginAtZero: true, grid: { color: 'rgba(255,255,255,0.05)' }, ticks: { color: '#a08060', font: { size: 10 } } },
+        x: { grid: { display: false }, ticks: { color: '#a08060', font: { size: 10 } } }
+      }
+    }
+  });
+}
+
+function initPagosChart(sales) {
+  const ctx = document.getElementById('chart-pagos');
+  if (!ctx) return;
+  
+  const pagos = { 'Efectivo': 0, 'Tarjeta': 0, 'Transferencia': 0 };
+  sales.forEach(s => {
+    const m = s.medio_pago || 'Efectivo';
+    if (pagos[m] !== undefined) pagos[m] += s.total || 0;
+  });
+
+  if (window.dashboardCharts.pagos) window.dashboardCharts.pagos.destroy();
+  
+  window.dashboardCharts.pagos = new Chart(ctx, {
+    type: 'doughnut',
+    data: {
+      labels: Object.keys(pagos),
+      datasets: [{
+        data: Object.values(pagos),
+        backgroundColor: ['#f0c040', '#4caf82', '#5b9bd5'],
+        borderWidth: 0,
+        hoverOffset: 10
+      }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: { position: 'bottom', labels: { color: '#f0e6d3', font: { size: 11 }, padding: 15 } }
+      },
+      cutout: '70%'
+    }
+  });
+}
+
+function initReparacionesChart() {
+  const ctx = document.getElementById('chart-reparaciones');
+  if (!ctx) return;
+  
+  const stats = { 'Recibidas': 0, 'En Proceso': 0, 'Listas': 0, 'Entregadas': 0 };
+  DATA.repairs.forEach(r => {
+    if (r.estado === 'recibido') stats['Recibidas']++;
+    else if (r.estado === 'progreso') stats['En Proceso']++;
+    else if (r.estado === 'listo') stats['Listas']++;
+    else if (r.estado === 'entregado') stats['Entregadas']++;
+  });
+
+  if (window.dashboardCharts.reps) window.dashboardCharts.reps.destroy();
+  
+  window.dashboardCharts.reps = new Chart(ctx, {
+    type: 'bar',
+    data: {
+      labels: Object.keys(stats),
+      datasets: [{
+        data: Object.values(stats),
+        backgroundColor: ['#5b9bd5', '#f0c040', '#4caf82', '#a08060'],
+        borderRadius: 5
+      }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: { legend: { display: false } },
+      scales: {
+        y: { beginAtZero: true, grid: { color: 'rgba(255,255,255,0.05)' }, ticks: { color: '#a08060' } },
+        x: { grid: { display: false }, ticks: { color: '#a08060' } }
+      }
+    }
+  });
+}
+
+function initStockChart() {
+  const ctx = document.getElementById('chart-stock-cat');
+  if (!ctx) return;
+  
+  const cats = {};
+  DATA.stock.forEach(s => {
+    const c = s.categoria || 'Otros';
+    cats[c] = (cats[c] || 0) + (s.lanus + s.belgrano + s.deposito);
+  });
+
+  if (window.dashboardCharts.stock) window.dashboardCharts.stock.destroy();
+  
+  window.dashboardCharts.stock = new Chart(ctx, {
+    type: 'polarArea',
+    data: {
+      labels: Object.keys(cats),
+      datasets: [{
+        data: Object.values(cats),
+        backgroundColor: ['rgba(240,192,64,0.4)', 'rgba(76,175,130,0.4)', 'rgba(91,155,213,0.4)', 'rgba(224,85,85,0.4)'],
+        borderColor: 'rgba(255,255,255,0.1)',
+        borderWidth: 1
+      }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: { position: 'right', labels: { color: '#f0e6d3', font: { size: 10 } } }
+      },
+      scales: {
+        r: { grid: { color: 'rgba(255,255,255,0.05)' }, ticks: { display: false } }
+      }
+    }
+  });
+}
 
 function kpiCard(icon, label, value, sub, badge, badgeType) {
   return `
@@ -202,52 +453,4 @@ function kpiCard(icon, label, value, sub, badge, badgeType) {
       <div class="kpi-sub">${sub}</div>
     </div>
   `;
-}
-
-function progressRow(label, pct, colorClass, val) {
-  return `
-    <div class="progress-row">
-      <div class="progress-label">
-        <span style="font-size:12px;">${label}</span>
-        <span style="font-size:12px;">${pct}%</span>
-      </div>
-      <div class="progress-bar-track">
-        <div class="progress-bar-fill ${colorClass}" style="width:${pct}%"></div>
-      </div>
-    </div>
-  `;
-}
-
-function repairStatusBadge(estado) {
-  const map = {
-    recibido: ['🔵 Recibido', 'color:var(--blue);background:rgba(91,155,213,0.1);'],
-    progreso: ['🟡 Proceso',  'color:var(--yellow);background:rgba(240,192,64,0.1);'],
-    listo:    ['🟢 Listo',    'color:var(--green);background:rgba(76,175,130,0.1);'],
-  };
-  const [label, style] = map[estado] || ['—', ''];
-  return `<span style="font-size:11px;font-weight:600;padding:2px 8px;border-radius:10px;${style}">${label}</span>`;
-}
-
-function renderBarChart(isTotalView, loc) {
-  const container = document.getElementById('bar-chart');
-  if (!container) return;
-  const d = DATA.ventas_semana;
-  const maxVal = Math.max(...d.lanus, ...d.belgrano) || 1;
-
-  container.innerHTML = d.labels.map((label, i) => {
-    const lH = Math.round((d.lanus[i] / maxVal) * 100);
-    const bH = Math.round((d.belgrano[i] / maxVal) * 100);
-    const showL = isTotalView || loc === 'lanus';
-    const showB = isTotalView || loc === 'belgrano';
-    
-    return `
-      <div class="bar-group">
-        <div class="bars">
-          ${showL ? `<div class="bar lanus" style="height:${lH}px;"></div>` : ''}
-          ${showB ? `<div class="bar belgrano" style="height:${bH}px;"></div>` : ''}
-        </div>
-        <div class="bar-label">${label}</div>
-      </div>
-    `;
-  }).join('');
 }
