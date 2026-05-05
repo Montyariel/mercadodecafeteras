@@ -171,12 +171,34 @@ window.loadAllData = async function(force = false) {
     window.lastSyncTime = Date.now();
     console.log('✅ Datos sincronizados correctamente.');
     
-    // Re-renderizar vista actual si es necesario (solo si hay cambios visuales o es dashboard)
+    // Actualizar badges de navegación
+    window.updateBadges();
+
+    // Re-renderizar vista actual si es necesario
     const fnName = 'render' + window.currentView.charAt(0).toUpperCase() + window.currentView.slice(1);
     if (typeof window[fnName] === 'function') {
-      // Evitar re-renderizar si el usuario está interactuando con un modal (opcional, pero dashboard es seguro)
-      if (window.currentView === 'dashboard' || force) window[fnName]();
+      const dataViews = ['dashboard', 'repairs', 'stock', 'transfers', 'audit', 'history'];
+      if (dataViews.includes(window.currentView) || force) {
+        window[fnName]();
+      }
     }
+
+window.updateBadges = function() {
+  const repairsCount = DATA.repairs.filter(r => r.estado === 'recibido' || r.estado === 'progreso').length;
+  const transfersCount = DATA.transfers.filter(t => t.estado === 'enviado' || t.estado === 'solicitado').length;
+  
+  const bRepairs = document.getElementById('badge-repairs');
+  if (bRepairs) {
+    bRepairs.textContent = repairsCount > 0 ? repairsCount : '';
+    bRepairs.className = 'nav-badge' + (repairsCount > 0 ? ' active' : '');
+  }
+  
+  const bTransfers = document.getElementById('badge-transfers');
+  if (bTransfers) {
+    bTransfers.textContent = transfersCount > 0 ? transfersCount : '';
+    bTransfers.className = 'nav-badge' + (transfersCount > 0 ? ' active' : '');
+  }
+};
 
   } catch (err) {
     console.error('Error cargando datos de Supabase:', err);

@@ -380,32 +380,6 @@ window.repairCardHTML = function repairCardHTML(r, colKey) {
 }
 
 // ─── Avanzar estado ───────────────────────
-window.advanceRepair = async function advanceRepair(id, newState) {
-  const repair = DATA.repairs.find(r => r.id === id);
-  if (repair) {
-    repair.estado = newState;
-    if (newState === 'entregado') {
-      repair.fechaEntrega = new Date();
-    }
-
-    // Persistir en Supabase
-    let syncSuccess = true;
-    try {
-      if (SUPABASE_KEY !== 'TU_ANON_KEY_AQUI') {
-        const updates = { 
-          estado: newState, 
-          fecha_entrega: repair.fechaEntrega ? repair.fechaEntrega.toISOString() : null 
-        };
-        await db.repairs.update(id, updates);
-      }
-    } catch (err) {
-      console.error('Error al actualizar en Supabase:', err);
-      syncSuccess = false;
-      showToast('⚠️ Error de conexión con la nube. Se guardó localmente.', 'warning');
-    }
-
-    renderKanban();
-    
     if (syncSuccess) {
       const msgs = { 
         progreso: '🟡 Diagnóstico iniciado', 
@@ -413,7 +387,12 @@ window.advanceRepair = async function advanceRepair(id, newState) {
         entregado: '🤝 ¡Equipo entregado exitosamente!'
       };
       showToast(msgs[newState] || 'Estado actualizado', 'success');
+      
+      if (window.logUserAction) {
+        window.logUserAction('Actualización de Reparación', `ID: ${id} | Nuevo Estado: ${newState.toUpperCase()}`);
+      }
     }
+    renderKanban();
   }
 }
 
@@ -669,6 +648,9 @@ window.guardarPresupuesto = async function guardarPresupuesto(silencioso = false
     renderKanban();
     if (syncSuccess) {
       showToast(`✅ Cambios guardados (${formatCurrency(data.total)})`, 'success');
+      if (window.logUserAction) {
+        window.logUserAction('Carga de Presupuesto', `ID: ${r.id} | Total: ${formatCurrency(data.total)}`);
+      }
     }
   }
   return syncSuccess;
@@ -721,6 +703,9 @@ window.aprobarYGuardar = async function aprobarYGuardar() {
   closePresupuestoModal();
   renderKanban();
   showToast('🤝 Presupuesto aprobado y stock sincronizado online', 'success');
+  if (window.logUserAction) {
+    window.logUserAction('Aprobación de Presupuesto', `ID: ${r.id} | Stock descontado en ${r.sucursal.toUpperCase()}`);
+  }
 }
 
 // Enviar presupuesto por WhatsApp desde el modal
@@ -860,6 +845,10 @@ window.saveRepair = async function saveRepair() {
         };
         DATA.transfers.unshift(newTr);
         await db.transfers.insert(newTr);
+        
+        if (window.logUserAction) {
+          window.logUserAction('Traslado Automático (Reparación)', `ID: ${trId} | De Belgrano a Lanús`);
+        }
       }
     }
   } catch (err) {
@@ -875,6 +864,9 @@ window.saveRepair = async function saveRepair() {
   
   if (syncSuccess) {
     showToast(`✅ Reparación ${manualId} registrada correctamente`, 'success');
+    if (window.logUserAction) {
+      window.logUserAction('Nueva Reparación', `ID: ${manualId} | Cliente: ${cliente} | Sucursal: ${sucursal.toUpperCase()}`);
+    }
   }
 
   // Preguntar si desea imprimir el ticket inmediatamente
