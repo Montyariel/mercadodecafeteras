@@ -648,7 +648,8 @@ window.guardarPresupuesto = async function guardarPresupuesto(silencioso = false
     if (SUPABASE_KEY !== 'TU_ANON_KEY_AQUI') {
       const updates = { 
         presupuesto: data, 
-        diagnostico_tecnico: diag 
+        diagnostico_tecnico: diag,
+        aprobado: r.aprobado // Asegurar que el estado de aprobación se persista
       };
       if (isOfficialWarranty) {
         updates.oster_op = r.oster_op;
@@ -674,32 +675,52 @@ window.guardarPresupuesto = async function guardarPresupuesto(silencioso = false
 }
 
 // Función para aprobar y descontar stock
-window.aprobarYGuardar = function aprobarYGuardar() {
+window.aprobarYGuardar = async function aprobarYGuardar() {
   const r = DATA.repairs.find(x => x.id === _presupuestoRepairId);
   if (!r) return;
 
-  guardarPresupuesto(true);
+  r.aprobado = true; // Marcar como aprobado antes de guardar
+  const saveSuccess = await guardarPresupuesto(true);
   
-  // Descontar stock (Reserva)
+  if (!saveSuccess) {
+    r.aprobado = false;
+    showToast('⚠️ No se pudo aprobar: Error de conexión con la nube.', 'error');
+    return;
+  }
+  
+  // Descontar stock (Reserva) y persistir en Supabase
   if (r.presupuesto && r.presupuesto.componentes) {
+    const stockPromises = [];
     r.presupuesto.componentes.forEach(comp => {
       if (comp.stockId) {
         const item = DATA.stock.find(s => s.id == comp.stockId);
         if (item) {
           if (item[r.sucursal] > 0) {
             item[r.sucursal]--;
+            // Persistir cambio de stock en Supabase
+            if (SUPABASE_KEY !== 'TU_ANON_KEY_AQUI') {
+              stockPromises.push(db.stock.updateBranch(item.id, r.sucursal, item[r.sucursal]));
+            }
           } else {
-            showToast(`⚠️ Stock insuficiente de ${item.nombre} en ${r.sucursal}`, 'error');
+            showToast(`⚠️ Stock insuficiente de ${item.nombre} en ${r.sucursal}`, 'warning');
           }
         }
       }
     });
+    
+    if (stockPromises.length > 0) {
+      try {
+        await Promise.all(stockPromises);
+      } catch (err) {
+        console.error('Error al actualizar stock en Supabase:', err);
+        showToast('⚠️ El presupuesto se aprobó pero hubo un error al descontar stock en la nube.', 'warning');
+      }
+    }
   }
 
-  r.aprobado = true;
   closePresupuestoModal();
   renderKanban();
-  showToast('🤝 Presupuesto aprobado y stock reservado', 'success');
+  showToast('🤝 Presupuesto aprobado y stock sincronizado online', 'success');
 }
 
 // Enviar presupuesto por WhatsApp desde el modal

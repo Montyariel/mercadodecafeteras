@@ -53,6 +53,9 @@ window.navigate = function(view) {
     window[fnName]();
   }
 
+  // Verificar si hay datos nuevos al cambiar de vista (sin forzar)
+  if (window.currentUser) window.loadAllData(false);
+
   if (window.innerWidth <= 700) closeSidebarMobile();
 };
 
@@ -113,7 +116,14 @@ window.updateClock = function() {
 
 // ─── Carga Centralizada de Datos ──────────────
 window.loadAllData = async function(force = false) {
-  if (!force && window.dataLoaded) return;
+  // Evitar múltiples cargas simultáneas
+  if (window.isSyncing) return;
+  
+  // Si no es forzado y se cargó hace menos de 30 segundos, omitir para no saturar
+  const now = Date.now();
+  if (!force && window.dataLoaded && window.lastSyncTime && (now - window.lastSyncTime < 30000)) {
+    return;
+  }
   
   if (typeof SUPABASE_KEY === 'undefined' || SUPABASE_KEY === 'TU_ANON_KEY_AQUI' || typeof db === 'undefined') {
     console.log('Modo Mock Activo: No se cargan datos remotos.');
@@ -121,6 +131,7 @@ window.loadAllData = async function(force = false) {
     return;
   }
 
+  window.isSyncing = true;
   try {
     console.log('🔄 Sincronizando datos con Supabase...');
     const [repairs, stock, sales, transfers, withdrawals] = await Promise.all([
@@ -131,11 +142,11 @@ window.loadAllData = async function(force = false) {
       db.withdrawals.getAll()
     ]);
 
-    // Helper de unión para no perder datos locales que aún no están en la nube (ej: falló el insert)
+    // Helper de unión para no perder datos locales que aún no están en la nube
     const mergeCollection = (local, remote, idField = 'id') => {
       if (!remote) return local;
       const remoteIds = new Set(remote.map(r => r[idField]));
-      // Mantener lo que está en remoto + lo que está local pero NO está en remoto (nuevos/pendientes)
+      // Mantener lo que está en remoto + lo que está local pero NO está en remoto
       const localOnly = local.filter(l => l[idField] && !remoteIds.has(l[idField]));
       return [...remote, ...localOnly];
     };
@@ -145,38 +156,44 @@ window.loadAllData = async function(force = false) {
     if (transfers) DATA.transfers = mergeCollection(DATA.transfers, transfers);
     if (withdrawals) DATA.withdrawals = mergeCollection(DATA.withdrawals, withdrawals);
     
-    // El stock es especial por las imágenes y porque remote es la verdad absoluta de cantidades
     if (stock && stock.length > 0) {
-      const mergedStock = stock.map(remoteItem => {
+      // El stock de la nube es la verdad absoluta para las cantidades
+      DATA.stock = stock.map(remoteItem => {
         const localItem = DATA.stock.find(l => l.id === remoteItem.id || l.nombre === remoteItem.nombre);
         if (localItem) {
           return { ...localItem, ...remoteItem, imagen: localItem.imagen || remoteItem.imagen };
         }
         return remoteItem;
       });
-      
-      // Añadimos locales que no están en remoto (nuevos productos creados localmente)
-      DATA.stock.forEach(localItem => {
-        if (!stock.find(r => r.id === localItem.id || r.nombre === localItem.nombre)) {
-          mergedStock.push(localItem);
-        }
-      });
-      
-      DATA.stock = mergedStock;
     }
 
     window.dataLoaded = true;
+    window.lastSyncTime = Date.now();
     console.log('✅ Datos sincronizados correctamente.');
     
-    // Re-renderizar vista actual
+    // Re-renderizar vista actual si es necesario (solo si hay cambios visuales o es dashboard)
     const fnName = 'render' + window.currentView.charAt(0).toUpperCase() + window.currentView.slice(1);
-    if (typeof window[fnName] === 'function') window[fnName]();
+    if (typeof window[fnName] === 'function') {
+      // Evitar re-renderizar si el usuario está interactuando con un modal (opcional, pero dashboard es seguro)
+      if (window.currentView === 'dashboard' || force) window[fnName]();
+    }
 
   } catch (err) {
     console.error('Error cargando datos de Supabase:', err);
-    showToast('⚠️ Error al sincronizar con la nube.', 'warning');
+    if (force) showToast('⚠️ Error al sincronizar con la nube.', 'warning');
+  } finally {
+    window.isSyncing = false;
   }
 };
+
+// ─── Auto-Sincronización Periódica ───────────
+if (!window.syncInterval) {
+  window.syncInterval = setInterval(() => {
+    if (window.currentUser) {
+      window.loadAllData(false); // Sincronización en segundo plano cada 60s
+    }
+  }, 60000);
+}
 
 // ─── Init ────────────────────────────────────
 window.init = function() {
