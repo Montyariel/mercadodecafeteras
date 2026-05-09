@@ -221,12 +221,14 @@ window.renderKanban = function renderKanban() {
       const matchState = r.estado === col.key && (repairsFilter === 'all' || repairsFilter === col.key);
       if (!matchState) return false;
 
-      const repairBranch = window.getRepairBranch(r);
-      // Si no es admin o depósito, filtrar por sucursal de origen
-      if (!isAdmin && !isWarehouse) {
-        return repairBranch === userLoc;
-      }
-      return true;
+      if (isAdmin || isWarehouse) return true;
+
+      // CIRCUITO CROSS-BRANCH:
+      // Visible si: fue admitida acá (soy el contacto del cliente)
+      //         O: la máquina está físicamente acá ahora (debo trabajar en ella)
+      const admitBranch = r.sucursal_admit || r.sucursalAdmit || r.sucursal;
+      const physicalBranch = r.sucursal;
+      return admitBranch === userLoc || physicalBranch === userLoc;
     });
     return `
       <div class="kanban-col ${col.cls}">
@@ -309,41 +311,59 @@ window.repairCardHTML = function repairCardHTML(r, colKey) {
       </div>`
     : '';
 
-  // Botones según columna
+  // ─── Contexto del usuario actual ───────────────────────────────
+  const _uLoc   = window.currentUser ? window.currentUser.location : 'lanus';
+  const _uRole  = window.currentUser ? window.currentUser.role : 'vendor';
+  const _isAdm  = _uRole === 'admin' || _uRole === 'warehouse';
+  const _admit  = r.sucursal_admit || r.sucursalAdmit || r.sucursal;
+  const _phys   = r.sucursal;
+  const _canWork = _isAdm || _phys === _uLoc;
+
+  // Botones según columna y contexto
   let actionBtns = '';
   if (colKey === 'recibido') {
-    actionBtns = `
-      <button class="btn btn-ghost" style="font-size:11px;padding:4px 10px;"
+    if (_canWork) {
+      actionBtns = `<button class="btn btn-ghost" style="font-size:11px;padding:4px 10px;"
         onclick="advanceRepair('${r.id}','progreso')">→ Iniciar diagnóstico</button>`;
+    } else {
+      actionBtns = `<span style="font-size:11px;color:var(--text-muted);font-style:italic;">⏳ En tránsito al Taller</span>`;
+    }
 
   } else if (colKey === 'progreso') {
-    const btnPresup = `
-      <button class="btn ${r.presupuesto ? 'btn-ghost' : 'btn-primary'}"
-        style="font-size:11px;padding:4px 10px;"
-        onclick="openPresupuestoModal('${r.id}')">
-        ${r.presupuesto ? '✏️ Editar presupuesto' : '💲 Cargar presupuesto'}
-      </button>`;
-    const btnWA = r.presupuesto
-      ? `<button class="btn btn-ghost" style="font-size:11px;padding:4px 10px;color:var(--green);border-color:rgba(76,175,130,0.3);background:rgba(76,175,130,0.05);"
-           onclick="enviarPresupuestoWACard('${r.id}')">📲 Enviar Presupuesto para Confirmación</button>`
-      : '';
-    const btnListo = r.presupuesto
-      ? `<button class="btn btn-success" style="font-size:11px;padding:4px 10px;"
-           onclick="advanceRepair('${r.id}','listo')">✓ Listo para entrega</button>`
-      : `<span style="font-size:11px;color:var(--text-muted);font-style:italic;">Cargá el presupuesto primero</span>`;
-    actionBtns = `
-      <div style="display:flex;flex-wrap:wrap;gap:6px;justify-content:flex-end;">
-        ${btnPresup}${btnWA}${btnListo}
-      </div>`;
+    if (_canWork) {
+      const btnPresup = `<button class="btn ${r.presupuesto ? 'btn-ghost' : 'btn-primary'}" style="font-size:11px;padding:4px 10px;" onclick="openPresupuestoModal('${r.id}')">${r.presupuesto ? '✏️ Editar presupuesto' : '💲 Cargar presupuesto'}</button>`;
+      const btnWA = r.presupuesto
+        ? `<button class="btn btn-ghost" style="font-size:11px;padding:4px 10px;color:var(--green);border-color:rgba(76,175,130,0.3);background:rgba(76,175,130,0.05);" onclick="enviarPresupuestoWACard('${r.id}')">📲 Enviar Presupuesto</button>`
+        : '';
+      const btnListo = r.presupuesto
+        ? `<button class="btn btn-success" style="font-size:11px;padding:4px 10px;" onclick="advanceRepair('${r.id}','listo')">✓ Listo para entrega</button>`
+        : `<span style="font-size:11px;color:var(--text-muted);font-style:italic;">Cargá el presupuesto primero</span>`;
+      actionBtns = `<div style="display:flex;flex-wrap:wrap;gap:6px;justify-content:flex-end;">${btnPresup}${btnWA}${btnListo}</div>`;
+    } else {
+      actionBtns = `<span style="font-size:11px;color:var(--yellow);font-style:italic;">🔧 Siendo reparada en Taller Lanús</span>`;
+    }
 
   } else {
-    actionBtns = `
-      <div style="display:flex;flex-wrap:wrap;gap:6px;justify-content:flex-end;">
-        <button class="btn btn-ghost" style="font-size:11px;padding:4px 10px;"
-          onclick="notifyClient('${r.id}')">📲 Avisar al cliente</button>
-        <button class="btn btn-primary" style="font-size:11px;padding:4px 10px;"
-          onclick="advanceRepair('${r.id}','entregado')">🤝 Entregar equipo</button>
+    // listo
+    const isCrossAtLanus = _admit === 'belgrano' && _phys === 'lanus';
+    const isCrossBackAtBelgrano = _admit === 'belgrano' && _phys === 'belgrano';
+
+    if (isCrossAtLanus && (_isAdm || _uLoc === 'lanus')) {
+      // Lanús terminó — debe enviar de vuelta a Belgrano
+      actionBtns = `<div style="display:flex;flex-wrap:wrap;gap:6px;justify-content:flex-end;">
+        <button class="btn btn-ghost" style="font-size:11px;padding:4px 10px;" onclick="notifyClient('${r.id}')">📲 Avisar cliente</button>
+        <button class="btn btn-primary" style="font-size:11px;padding:4px 10px;background:var(--blue);border-color:var(--blue);" onclick="enviarRepairABelgrano('${r.id}')">📤 Enviar a Belgrano</button>
       </div>`;
+    } else if (isCrossAtLanus && _uLoc === 'belgrano') {
+      // Belgrano ve que está lista pero aún en el taller
+      actionBtns = `<span style="font-size:11px;color:var(--text-muted);font-style:italic;">⏳ Esperando envío del Taller</span>`;
+    } else {
+      // Normal: máquina en la sucursal de admisión, lista para entregar
+      actionBtns = `<div style="display:flex;flex-wrap:wrap;gap:6px;justify-content:flex-end;">
+        <button class="btn btn-ghost" style="font-size:11px;padding:4px 10px;" onclick="notifyClient('${r.id}')">📲 Avisar al cliente</button>
+        <button class="btn btn-primary" style="font-size:11px;padding:4px 10px;" onclick="advanceRepair('${r.id}','entregado')">🤝 Entregar equipo</button>
+      </div>`;
+    }
   }
 
   return `
@@ -383,42 +403,90 @@ window.advanceRepair = async function advanceRepair(id, newState) {
   const repair = DATA.repairs.find(r => r.id === id);
   if (!repair) return;
 
-  // 1. Actualizar estado local PRIMERO (para UI inmediata)
   repair.estado = newState;
-  if (newState === 'entregado') {
-    repair.fechaEntrega = new Date();
-  }
-  renderKanban(); // Actualizar UI inmediatamente
+  if (newState === 'entregado') repair.fechaEntrega = new Date();
 
-  // 2. Persistir en Supabase
+  // CIRCUITO CROSS-BRANCH: si Lanús inicia diagnóstico de reparación de Belgrano,
+  // registrar que la máquina está físicamente en Lanús ahora
+  const userLoc = window.currentUser ? window.currentUser.location : null;
+  const admitBranch = repair.sucursal_admit || repair.sucursalAdmit || repair.sucursal;
+  if (newState === 'progreso' && admitBranch === 'belgrano' && userLoc === 'lanus') {
+    repair.sucursal = 'lanus';
+  }
+
+  renderKanban();
+
+  const updates = {
+    estado: newState,
+    fecha_entrega: repair.fechaEntrega ? repair.fechaEntrega.toISOString() : null
+  };
+  if (newState === 'progreso' && admitBranch === 'belgrano' && userLoc === 'lanus') {
+    updates.sucursal = 'lanus';
+  }
+
   let syncSuccess = false;
   if (window.supabaseDB) {
     try {
-      const updates = { 
-        estado: newState, 
-        fecha_entrega: repair.fechaEntrega ? repair.fechaEntrega.toISOString() : null 
-      };
       await db.repairs.update(id, updates);
       syncSuccess = true;
     } catch (err) {
       console.error('Error al actualizar estado en Supabase:', err);
-      showToast('⚠️ Estado actualizado localmente. Error al sincronizar con la nube: ' + (err.message || ''), 'warning');
+      showToast('⚠️ Estado actualizado localmente. Error: ' + (err.message || ''), 'warning');
     }
   } else {
-    syncSuccess = true; // Modo offline, local es suficiente
+    syncSuccess = true;
   }
-  
-  const msgs = { 
-    progreso: '🟡 Diagnóstico iniciado', 
+
+  const msgs = {
+    progreso: '🟡 Diagnóstico iniciado',
     listo: '🟢 ¡Reparación lista para entregar!',
     entregado: '🤝 ¡Equipo entregado exitosamente!'
   };
   showToast(msgs[newState] || 'Estado actualizado', syncSuccess ? 'success' : 'warning');
-  
   if (syncSuccess && window.logUserAction) {
-    window.logUserAction('Actualización de Reparación', `ID: ${id} | Nuevo Estado: ${newState.toUpperCase()}`);
+    window.logUserAction('Actualización de Reparación', `ID: ${id} | Estado: ${newState.toUpperCase()}`);
   }
-}
+};
+
+// ─── Enviar reparación terminada de vuelta a Belgrano ─────────────────────
+window.enviarRepairABelgrano = async function enviarRepairABelgrano(id) {
+  const repair = DATA.repairs.find(r => r.id === id);
+  if (!repair) return;
+  if (!confirm(`¿Confirmas el envío de "${repair.modelo}" (${id}) de vuelta a Belgrano?`)) return;
+
+  // Actualizar ubicación física a Belgrano
+  repair.sucursal = 'belgrano';
+  renderKanban();
+
+  // Crear traslado de retorno
+  const now = new Date();
+  const trId = 'RET-REP-' + id;
+  const newTr = {
+    id: trId,
+    origen: 'lanus', destino: 'belgrano',
+    producto: '\u2705 Reparado \u2192 Belgrano (' + repair.modelo + ') ID:' + id,
+    stock_id: null, qty: 1,
+    fecha: `${now.getDate().toString().padStart(2,'0')}/${(now.getMonth()+1).toString().padStart(2,'0')}`,
+    estado: 'enviado'
+  };
+  DATA.transfers.unshift(newTr);
+
+  if (window.supabaseDB) {
+    try {
+      await db.repairs.update(id, { sucursal: 'belgrano' });
+      await db.transfers.insert(newTr);
+    } catch (err) {
+      console.error('Error al enviar reparación a Belgrano:', err);
+      showToast('\u26a0\ufe0f Actualizado localmente. Error en nube: ' + (err.message || ''), 'warning');
+      return;
+    }
+  }
+
+  showToast('\ud83d\udce4 Reparaci\u00f3n enviada a Belgrano. Traslado registrado.', 'success');
+  if (window.logUserAction) {
+    window.logUserAction('Retorno Reparaci\u00f3n a Belgrano', `ID: ${id} | Traslado: ${trId}`);
+  }
+};
 
 // ─── Avisar cliente (listo) ───────────────
 window.notifyClient = function notifyClient(id) {
