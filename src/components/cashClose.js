@@ -73,17 +73,27 @@ function buildCierreData(branch) {
     }
   });
 
-  // Retiros
+  // Retiros — solo los del turno actual (desde que se abrió la caja)
+  // Si hay un turno activo, usar su timestamp de apertura como límite inferior.
+  // Si no, usar la medianoche de hoy como límite inferior.
+  let shiftOpenTime = null;
+  if (window.activeShiftData && window.activeShiftData.created_at) {
+    shiftOpenTime = new Date(window.activeShiftData.created_at).getTime();
+  } else if (window.activeShiftData && window.activeShiftData.abierto_en) {
+    shiftOpenTime = new Date(window.activeShiftData.abierto_en).getTime();
+  }
+  // Límite mínimo: medianoche de hoy (en caso de no haber turno activo)
+  const todayMidnight = new Date();
+  todayMidnight.setHours(0, 0, 0, 0);
+  const lowerBound = shiftOpenTime ? Math.max(shiftOpenTime, todayMidnight.getTime()) : todayMidnight.getTime();
+
   const retirosHoy = (DATA.withdrawals || []).filter(w => {
     let f = w.fecha || w.created_at;
-    if (!f) return true;
-    if (f && (f.includes('T') || f.includes('-'))) {
-      const d = new Date(f);
-      const isoStr = d.toISOString().split('T')[0];
-      const todayIso = new Date().toISOString().split('T')[0];
-      return (isoStr === todayIso || f.startsWith(todayIso)) && (branch === 'ambas' || w.sucursal === branch);
-    }
-    return f === fechaHoy && (branch === 'ambas' || w.sucursal === branch);
+    if (!f) return false; // Sin fecha: NO incluir (evita contaminación de datos mock)
+    const wTime = new Date(f).getTime();
+    if (isNaN(wTime)) return false;
+    // Debe ser posterior al inicio del turno actual Y pertenecer a la sucursal correcta
+    return wTime >= lowerBound && (branch === 'ambas' || w.sucursal === branch);
   });
   const totalRetiros = retirosHoy.reduce((a, w) => a + w.monto, 0);
   const efectivoFinal = medios.efectivo - totalRetiros;

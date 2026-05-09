@@ -120,10 +120,7 @@ const DATA = {
     { id: 'TR-102', origen: 'deposito', destino: 'belgrano', producto: 'Filtros papel N°4 x100', qty: 20, fecha: '18/04', estado: 'enviado' },
   ],
 
-  withdrawals: [
-    { id: 1, sucursal: 'lanus', monto: 15000, motivo: 'Pago a proveedor de limpieza', categoria: 'Gasto Local', usuario: 'Vanesa', fecha: new Date().toISOString() },
-    { id: 2, sucursal: 'belgrano', monto: 50000, motivo: 'Adelanto de sueldo', categoria: 'Adelanto', usuario: 'Marcos', fecha: new Date().toISOString() }
-  ]
+  withdrawals: []
 };
 
 function formatCurrency(n) {
