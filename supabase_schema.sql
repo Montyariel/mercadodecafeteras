@@ -17,6 +17,9 @@ CREATE TABLE IF NOT EXISTS public.repairs (
     prioridad TEXT DEFAULT 'media', -- baja, media, alta
     is_oster BOOLEAN DEFAULT FALSE,
     oster_op TEXT,
+    is_peabody BOOLEAN DEFAULT FALSE,
+    peabody_op TEXT,
+    cliente_email TEXT,
     diagnostico_tecnico TEXT,
     aprobado BOOLEAN DEFAULT FALSE,
     fecha_entrega TIMESTAMPTZ,

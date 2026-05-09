@@ -125,7 +125,7 @@ window.loadAllData = async function(force = false) {
     return;
   }
   
-  if (typeof SUPABASE_KEY === 'undefined' || SUPABASE_KEY === 'TU_ANON_KEY_AQUI' || typeof db === 'undefined') {
+  if (!window.supabaseDB || typeof db === 'undefined') {
     console.log('Modo Mock Activo: No se cargan datos remotos.');
     window.dataLoaded = true;
     return;
@@ -142,16 +142,28 @@ window.loadAllData = async function(force = false) {
       db.withdrawals.getAll()
     ]);
 
-    // Helper de unión para no perder datos locales que aún no están en la nube
+    // CORRECCIÓN CRÍTICA: Los datos remotos son la fuente de verdad.
+    // Los datos mock (IDs con '#') solo se usan si NO hay datos reales en la nube.
+    // Esto previene que datos de demostración contaminen la base de datos real.
+    const isMockId = (id) => typeof id === 'string' && id.startsWith('#');
+    
     const mergeCollection = (local, remote, idField = 'id') => {
       if (!remote) return local;
+      if (remote.length === 0) return local; // Si la nube está vacía, mantener local
+      // Los datos reales de la nube son la fuente de verdad
+      // Solo agregamos datos locales que NO sean mock y NO estén en la nube
       const remoteIds = new Set(remote.map(r => r[idField]));
-      // Mantener lo que está en remoto + lo que está local pero NO está en remoto
-      const localOnly = local.filter(l => l[idField] && !remoteIds.has(l[idField]));
-      return [...remote, ...localOnly];
+      const localOnlyReal = local.filter(l => {
+        const lid = l[idField];
+        return lid && !isMockId(lid) && !remoteIds.has(lid);
+      });
+      return [...remote, ...localOnlyReal];
     };
 
-    if (repairs) DATA.repairs = mergeCollection(DATA.repairs, repairs);
+    if (repairs) {
+      DATA.repairs = mergeCollection(DATA.repairs, repairs);
+      console.log(`✅ Reparaciones cargadas: ${repairs.length} de la nube, ${DATA.repairs.length} total`);
+    }
     if (sales)   DATA.sales   = mergeCollection(DATA.sales,   sales);
     if (transfers) DATA.transfers = mergeCollection(DATA.transfers, transfers);
     if (withdrawals) DATA.withdrawals = mergeCollection(DATA.withdrawals, withdrawals);
@@ -307,6 +319,11 @@ window.init = function() {
 
     // Cargar datos al iniciar sesión
     window.loadAllData();
+    
+    // Iniciar suscripciones en tiempo real
+    if (typeof window.initRealtimeSubscription === 'function') {
+      window.initRealtimeSubscription();
+    }
 
     if (role === 'vendor') {
       checkCashShift();
@@ -322,16 +339,18 @@ window.init = function() {
 // ─── Utilidades Globales de Seguridad ────────
 window.getRepairBranch = function(r) {
   if (!r) return 'lanus';
-  const id = String(r.id || '').toUpperCase();
   
-  // 1. Blindaje por ID: Belgrano siempre empieza con B
-  if (id.startsWith('B')) return 'belgrano';
-  
-  // 2. Campo oficial de admisión
+  // PRIORIDAD 1: Campo oficial de admisión (fuente de verdad para filtrado de sucursal)
   const admit = r.sucursal_admit || r.sucursalAdmit;
-  if (admit) return admit;
+  if (admit && admit !== '') return admit;
   
-  // 3. Respaldo por ubicación física
+  // PRIORIDAD 2: Blindaje por prefijo de ID (L-xxx = Lanús, B-xxx = Belgrano)
+  // Solo aplica a IDs con guión (los nuevos), NO a los mock que empiezan con '#'
+  const id = String(r.id || '').toUpperCase();
+  if (id.startsWith('L-')) return 'lanus';
+  if (id.startsWith('B-')) return 'belgrano';
+  
+  // PRIORIDAD 3: Campo sucursal (respaldo)
   return r.sucursal || 'lanus';
 };
 

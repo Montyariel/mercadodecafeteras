@@ -381,41 +381,42 @@ window.repairCardHTML = function repairCardHTML(r, colKey) {
 
 window.advanceRepair = async function advanceRepair(id, newState) {
   const repair = DATA.repairs.find(r => r.id === id);
-  if (repair) {
-    repair.estado = newState;
-    if (newState === 'entregado') {
-      repair.fechaEntrega = new Date();
-    }
+  if (!repair) return;
 
-    // Persistir en Supabase
-    let syncSuccess = true;
+  // 1. Actualizar estado local PRIMERO (para UI inmediata)
+  repair.estado = newState;
+  if (newState === 'entregado') {
+    repair.fechaEntrega = new Date();
+  }
+  renderKanban(); // Actualizar UI inmediatamente
+
+  // 2. Persistir en Supabase
+  let syncSuccess = false;
+  if (window.supabaseDB) {
     try {
-      if (SUPABASE_KEY !== 'TU_ANON_KEY_AQUI') {
-        const updates = { 
-          estado: newState, 
-          fecha_entrega: repair.fechaEntrega ? repair.fechaEntrega.toISOString() : null 
-        };
-        await db.repairs.update(id, updates);
-      }
-    } catch (err) {
-      console.error('Error al actualizar en Supabase:', err);
-      syncSuccess = false;
-      showToast('⚠️ Error de conexión con la nube. Se guardó localmente.', 'warning');
-    }
-    
-    if (syncSuccess) {
-      const msgs = { 
-        progreso: '🟡 Diagnóstico iniciado', 
-        listo: '🟢 ¡Reparación lista para entregar!',
-        entregado: '🤝 ¡Equipo entregado exitosamente!'
+      const updates = { 
+        estado: newState, 
+        fecha_entrega: repair.fechaEntrega ? repair.fechaEntrega.toISOString() : null 
       };
-      showToast(msgs[newState] || 'Estado actualizado', 'success');
-      
-      if (window.logUserAction) {
-        window.logUserAction('Actualización de Reparación', `ID: ${id} | Nuevo Estado: ${newState.toUpperCase()}`);
-      }
+      await db.repairs.update(id, updates);
+      syncSuccess = true;
+    } catch (err) {
+      console.error('Error al actualizar estado en Supabase:', err);
+      showToast('⚠️ Estado actualizado localmente. Error al sincronizar con la nube: ' + (err.message || ''), 'warning');
     }
-    renderKanban();
+  } else {
+    syncSuccess = true; // Modo offline, local es suficiente
+  }
+  
+  const msgs = { 
+    progreso: '🟡 Diagnóstico iniciado', 
+    listo: '🟢 ¡Reparación lista para entregar!',
+    entregado: '🤝 ¡Equipo entregado exitosamente!'
+  };
+  showToast(msgs[newState] || 'Estado actualizado', syncSuccess ? 'success' : 'warning');
+  
+  if (syncSuccess && window.logUserAction) {
+    window.logUserAction('Actualización de Reparación', `ID: ${id} | Nuevo Estado: ${newState.toUpperCase()}`);
   }
 }
 
@@ -635,6 +636,7 @@ window.guardarPresupuesto = async function guardarPresupuesto(silencioso = false
   }
 
   r.diagnosticoTecnico = diag;
+  r.diagnostico_tecnico = diag; // Guardar en ambos campos para compatibilidad
   const data = collectPresupuestoData();
   
   if (data.componentes.length === 0 && data.manoObra === 0 && !isOfficialWarranty) {
@@ -645,25 +647,27 @@ window.guardarPresupuesto = async function guardarPresupuesto(silencioso = false
   r.presupuesto = data;
 
   // Persistir en Supabase
-  let syncSuccess = true;
-  try {
-    if (SUPABASE_KEY !== 'TU_ANON_KEY_AQUI') {
+  let syncSuccess = false;
+  if (window.supabaseDB) {
+    try {
       const updates = { 
         presupuesto: data, 
         diagnostico_tecnico: diag,
-        aprobado: r.aprobado // Asegurar que el estado de aprobación se persista
+        aprobado: r.aprobado || false
       };
       if (isOfficialWarranty) {
-        updates.oster_op = r.oster_op;
-        updates.peabody_op = r.peabody_op;
-        updates.cliente_email = r.cliente_email;
+        updates.oster_op = r.oster_op || '';
+        updates.peabody_op = r.peabody_op || '';
+        updates.cliente_email = r.cliente_email || '';
       }
       await db.repairs.update(r.id, updates);
+      syncSuccess = true;
+    } catch (err) {
+      console.error('Error al guardar presupuesto en Supabase:', err);
+      showToast('⚠️ Presupuesto guardado localmente. Error al sincronizar: ' + (err.message || ''), 'warning');
     }
-  } catch (err) {
-    console.error('Error al guardar presupuesto en Supabase:', err);
-    syncSuccess = false;
-    showToast('⚠️ Error de sincronización con la nube.', 'warning');
+  } else {
+    syncSuccess = true; // Modo offline OK
   }
 
   if (!silencioso) {
@@ -674,6 +678,8 @@ window.guardarPresupuesto = async function guardarPresupuesto(silencioso = false
       if (window.logUserAction) {
         window.logUserAction('Carga de Presupuesto', `ID: ${r.id} | Total: ${formatCurrency(data.total)}`);
       }
+    } else {
+      showToast(`⚠️ Presupuesto guardado localmente (${formatCurrency(data.total)})`, 'warning');
     }
   }
   return syncSuccess;
@@ -684,30 +690,32 @@ window.aprobarYGuardar = async function aprobarYGuardar() {
   const r = DATA.repairs.find(x => x.id === _presupuestoRepairId);
   if (!r) return;
 
-  r.aprobado = true; // Marcar como aprobado antes de guardar
+  r.aprobado = true;
   const saveSuccess = await guardarPresupuesto(true);
   
-  if (!saveSuccess) {
+  if (!saveSuccess && window.supabaseDB) {
+    // Si hay conexión pero falló, revertir
     r.aprobado = false;
     showToast('⚠️ No se pudo aprobar: Error de conexión con la nube.', 'error');
     return;
   }
   
   // Descontar stock (Reserva) y persistir en Supabase
+  // Usar sucursal_admit para descontar del stock correcto
+  const sucursalDescontar = r.sucursal_admit || r.sucursal || 'lanus';
   if (r.presupuesto && r.presupuesto.componentes) {
     const stockPromises = [];
     r.presupuesto.componentes.forEach(comp => {
       if (comp.stockId) {
         const item = DATA.stock.find(s => s.id == comp.stockId);
         if (item) {
-          if (item[r.sucursal] > 0) {
-            item[r.sucursal]--;
-            // Persistir cambio de stock en Supabase
-            if (SUPABASE_KEY !== 'TU_ANON_KEY_AQUI') {
-              stockPromises.push(db.stock.updateBranch(item.id, r.sucursal, item[r.sucursal]));
+          if (item[sucursalDescontar] > 0) {
+            item[sucursalDescontar]--;
+            if (window.supabaseDB) {
+              stockPromises.push(db.stock.updateBranch(item.id, sucursalDescontar, item[sucursalDescontar]));
             }
           } else {
-            showToast(`⚠️ Stock insuficiente de ${item.nombre} en ${r.sucursal}`, 'warning');
+            showToast(`⚠️ Stock insuficiente de ${item.nombre} en ${sucursalDescontar}`, 'warning');
           }
         }
       }
@@ -725,9 +733,9 @@ window.aprobarYGuardar = async function aprobarYGuardar() {
 
   closePresupuestoModal();
   renderKanban();
-  showToast('🤝 Presupuesto aprobado y stock sincronizado online', 'success');
+  showToast('🤝 Presupuesto aprobado y stock sincronizado', 'success');
   if (window.logUserAction) {
-    window.logUserAction('Aprobación de Presupuesto', `ID: ${r.id} | Stock descontado en ${r.sucursal.toUpperCase()}`);
+    window.logUserAction('Aprobación de Presupuesto', `ID: ${r.id} | Stock descontado en ${sucursalDescontar.toUpperCase()}`);
   }
 }
 
@@ -828,6 +836,11 @@ window.saveRepair = async function saveRepair() {
     return;
   }
 
+  if (!sucursal) {
+    showToast('⚠️ Error: no se pudo determinar la sucursal', 'error');
+    return;
+  }
+
   // Verificar que el ID no esté repetido
   if (DATA.repairs.some(r => r.id === manualId)) {
     showToast('⚠️ Ese número de reparación ya existe', 'error');
@@ -847,15 +860,24 @@ window.saveRepair = async function saveRepair() {
     diagnostico_tecnico: '', aprobado: false
   };
 
-  // Persistir en Supabase
-  let syncSuccess = true;
-  try {
-    if (SUPABASE_KEY !== 'TU_ANON_KEY_AQUI') {
-      await db.repairs.insert(newRepair);
+  // 1. Guardar en local PRIMERO (para que UI responda inmediatamente)
+  DATA.repairs.unshift(newRepair);
+  closeRepairModal();
+  renderKanban();
+  showToast(`⏳ Guardando reparación ${manualId}...`, '');
 
+  // 2. Intentar persistir en Supabase
+  let syncSuccess = false;
+  if (window.supabaseDB) {
+    try {
+      await db.repairs.insert(newRepair);
+      syncSuccess = true;
+      console.log('[saveRepair] Reparación guardada en Supabase:', manualId);
+
+      // Traslado automático si viene de Belgrano
       if (sucursal === 'belgrano') {
-        const today = new Date();
-        const f_hor = `${today.getDate().toString().padStart(2,'0')}/${(today.getMonth()+1).toString().padStart(2,'0')} ${today.getHours()}:${today.getMinutes()}hs`;
+        const now = new Date();
+        const f_hor = `${now.getDate().toString().padStart(2,'0')}/${(now.getMonth()+1).toString().padStart(2,'0')} ${now.getHours()}:${String(now.getMinutes()).padStart(2,'0')}hs`;
         const trId = 'REM-REP-' + manualId;
         const newTr = {
           id: trId,
@@ -867,33 +889,34 @@ window.saveRepair = async function saveRepair() {
           estado: 'enviado'
         };
         DATA.transfers.unshift(newTr);
-        await db.transfers.insert(newTr);
-        
+        try {
+          await db.transfers.insert(newTr);
+        } catch (trErr) {
+          console.error('[saveRepair] Error al insertar traslado automático:', trErr);
+        }
         if (window.logUserAction) {
           window.logUserAction('Traslado Automático (Reparación)', `ID: ${trId} | De Belgrano a Lanús`);
         }
       }
+    } catch (err) {
+      console.error('[saveRepair] Error al insertar en Supabase:', err);
+      showToast(`⚠️ Guardado localmente. Error en nube: ${err.message || 'Error desconocido'}`, 'warning');
     }
-  } catch (err) {
-    console.error('Error al insertar en Supabase:', err);
-    syncSuccess = false;
-    showToast('⚠️ Error de conexión con la nube. Se guardó localmente.', 'warning');
+  } else {
+    syncSuccess = true; // Modo offline, local es suficiente
   }
-
-  DATA.repairs.unshift(newRepair);
-  
-  closeRepairModal();
-  renderKanban();
   
   if (syncSuccess) {
-    showToast(`✅ Reparación ${manualId} registrada correctamente`, 'success');
+    showToast(`✅ Reparación ${manualId} guardada en la nube`, 'success');
     if (window.logUserAction) {
       window.logUserAction('Nueva Reparación', `ID: ${manualId} | Cliente: ${cliente} | Sucursal: ${sucursal.toUpperCase()}`);
     }
   }
 
-  // Preguntar si desea imprimir el ticket inmediatamente
-  if (confirm(`¿Desea imprimir el comprobante de ingreso para ${cliente}?`)) {
-    printAdmissionReceipt(manualId);
-  }
+  // Preguntar si desea imprimir el ticket
+  setTimeout(() => {
+    if (confirm(`¿Desea imprimir el comprobante de ingreso para ${cliente}?`)) {
+      printAdmissionReceipt(manualId);
+    }
+  }, 300);
 }
