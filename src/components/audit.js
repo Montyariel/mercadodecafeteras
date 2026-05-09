@@ -53,8 +53,10 @@ window.renderAudit = async function () {
                 <td style="color:var(--text-muted); font-size:11px; white-space:nowrap;">${dateStr}</td>
                 <td style="font-weight:600; font-size:13px; color:var(--text-primary);">${log.usuario || 'Anónimo'}</td>
                 <td style="font-size:11px;">
-                  <span class="section-tag">${log.rol || 'Personal'}</span>
-                  <span class="${branchClass}" style="padding:2px 6px;border-radius:4px;border:1px solid var(--border-subtle); margin-left:5px;">${sucursal.toUpperCase()}</span>
+                  <div style="display:flex; gap:6px; flex-wrap:wrap; align-items:center;">
+                    <span class="section-tag" style="display:inline-block; line-height:1;">${log.rol || 'Personal'}</span>
+                    <span class="${branchClass}" style="display:inline-block; line-height:1; padding:2px 6px;border-radius:4px;border:1px solid var(--border-subtle);">${sucursal.toUpperCase()}</span>
+                  </div>
                 </td>
                 <td style="font-weight:700; color:var(--gold-mid);">${log.accion || 'Movimiento'}</td>
                 <td style="font-size:12px; color:var(--text-secondary); min-width:200px; max-width:400px; line-height:1.4;">${log.detalles || ''}</td>

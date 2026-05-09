@@ -250,7 +250,7 @@ window.init = function() {
     const navCierre = document.getElementById('nav-cierre');
     const navAudit = document.getElementById('nav-audit');
 
-    if (role === 'admin') {
+    if (role === 'admin' || role === 'warehouse') {
       if (navAudit) navAudit.style.display = 'flex';
     } else {
       if (navAudit) navAudit.style.display = 'none';
